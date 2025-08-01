@@ -19,6 +19,20 @@ When any error occurs during development:
 
 This protocol ensures knowledge accumulation and prevents recurring issues.
 
+## Mandatory Progress Tracking Protocol
+
+**CRITICAL RULE: Every development session MUST update PROJECT_PROGRESS.md**
+
+When any development work is completed:
+1. 📈 Document current implementation status
+2. ✅ List completed features and components
+3. 🔄 Update progress percentage and milestones
+4. 🎯 Define next steps and priorities
+5. 📋 Record any architectural decisions made
+6. 📝 Update PROJECT_PROGRESS.md immediately
+
+This protocol ensures clear visibility of project development status and facilitates continuation of work across sessions.
+
 ## Project Overview - University Attendance Management iOS App
 
 大学生向けの授業欠席管理iOSアプリケーション
@@ -43,6 +57,7 @@ This protocol ensures knowledge accumulation and prevents recurring issues.
 - `PersistenceController.swift`: Core Data management
 - `AttendanceModel.xcdatamodeld`: Data model definitions
 - `ERROR_RESOLUTION_LOG.md`: Troubleshooting knowledge base
+- `PROJECT_PROGRESS.md`: Development progress tracking
 
 ### Development Commands
 ```bash
@@ -63,5 +78,6 @@ open At00.xcodeproj
 - Separate complex SwiftUI expressions into simpler state variables
 - Clean build after Core Data model changes
 - Update ERROR_RESOLUTION_LOG.md for every resolved error
+- Update PROJECT_PROGRESS.md after every development session
 
 This project serves as both a functional app and a learning resource for iOS development best practices.
