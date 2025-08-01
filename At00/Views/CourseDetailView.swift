@@ -18,93 +18,152 @@ struct CourseDetailView: View {
     var body: some View {
         NavigationView {
             ScrollView {
-                VStack(alignment: .leading, spacing: 20) {
-                    // 授業基本情報
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text("授業情報")
-                            .font(.headline)
-                        
-                        InfoRow(title: "授業名", value: course.courseName ?? "")
-                        InfoRow(title: "曜日・時限", value: "\(dayName)曜日 \(course.period)限")
-                        InfoRow(title: "総授業回数", value: "\(course.totalClasses)回")
-                        InfoRow(title: "最大欠席可能回数", value: "\(course.maxAbsences)回")
-                    }
-                    .padding()
-                    .background(Color(.systemGray6))
-                    .cornerRadius(12)
-                    
-                    // 出席状況サマリー
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text("出席状況")
-                            .font(.headline)
-                        
+                VStack(spacing: 24) {
+                    // ヘッダーカード（授業名とカラー）
+                    VStack(spacing: 16) {
                         HStack {
-                            StatusCard(
-                                title: "現在の欠席回数",
-                                value: "\(viewModel.getAbsenceCount(for: course))",
-                                color: viewModel.getStatusColor(for: course)
-                            )
+                            Rectangle()
+                                .fill(DesignSystem.getColor(for: Int(course.colorIndex)))
+                                .frame(width: 6, height: 60)
+                                .cornerRadius(3)
                             
-                            StatusCard(
-                                title: "残り欠席可能",
-                                value: "\(viewModel.getRemainingAbsences(for: course))",
-                                color: viewModel.getStatusColor(for: course)
-                            )
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(course.courseName ?? "")
+                                    .font(.title2)
+                                    .fontWeight(.bold)
+                                
+                                Text("\(dayName)曜日 \(course.period)限")
+                                    .font(.subheadline)
+                                    .foregroundColor(.secondary)
+                            }
+                            
+                            Spacer()
                         }
+                        
+                        // 出席状況の大きな表示
+                        HStack(spacing: 20) {
+                            VStack {
+                                Text("\(viewModel.getAbsenceCount(for: course))")
+                                    .font(.system(size: 36, weight: .bold))
+                                    .foregroundColor(viewModel.getStatusColor(for: course))
+                                
+                                Text("欠席回数")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                            
+                            VStack {
+                                Text("\(viewModel.getRemainingAbsences(for: course))")
+                                    .font(.system(size: 36, weight: .bold))
+                                    .foregroundColor(.green)
+                                
+                                Text("残り可能")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                        }
+                        .padding(.vertical)
                     }
                     .padding()
-                    .background(Color(.systemGray6))
-                    .cornerRadius(12)
+                    .cardStyle()
+                    
+                    // プログレスバー
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack {
+                            Text("出席状況")
+                                .font(.headline)
+                            Spacer()
+                            Text("\(Int(course.maxAbsences) - viewModel.getAbsenceCount(for: course))/\(course.maxAbsences)")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                        
+                        ProgressView(value: Double(viewModel.getAbsenceCount(for: course)), 
+                                   total: Double(course.maxAbsences))
+                            .progressViewStyle(LinearProgressViewStyle(tint: viewModel.getStatusColor(for: course)))
+                            .scaleEffect(x: 1, y: 3, anchor: .center)
+                    }
+                    .padding()
+                    .cardStyle()
                     
                     // アクションボタン
-                    VStack(spacing: 16) {
+                    VStack(spacing: 12) {
                         // 欠席記録ボタン
                         Button(action: {
-                            viewModel.recordAbsence(for: course)
-                            dismiss()
+                            withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
+                                viewModel.recordAbsence(for: course)
+                            }
+                            // ハプティックフィードバック
+                            let impactFeedback = UIImpactFeedbackGenerator(style: .medium)
+                            impactFeedback.impactOccurred()
+                            
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                                dismiss()
+                            }
                         }) {
-                            HStack {
+                            HStack(spacing: 12) {
                                 Image(systemName: "minus.circle.fill")
-                                Text("欠席を記録")
+                                    .font(.title2)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("欠席を記録")
+                                        .font(.system(size: 16, weight: .semibold))
+                                    Text("タップで即座に記録")
+                                        .font(.caption)
+                                        .opacity(0.8)
+                                }
+                                Spacer()
                             }
-                            .font(.system(size: 18, weight: .semibold))
                             .foregroundColor(.white)
-                            .frame(maxWidth: .infinity, minHeight: 50)
-                            .background(Color.red)
-                            .cornerRadius(12)
+                            .padding()
+                            .background(
+                                LinearGradient(
+                                    colors: [.red, .red.opacity(0.8)],
+                                    startPoint: .leading,
+                                    endPoint: .trailing
+                                )
+                            )
+                            .cornerRadius(16)
                         }
                         
-                        // 詳細記録ボタン
-                        Button(action: {
-                            showingRecordDetail = true
-                        }) {
-                            HStack {
-                                Image(systemName: "pencil.circle.fill")
-                                Text("詳細記録")
+                        HStack(spacing: 12) {
+                            // 詳細記録ボタン
+                            Button(action: {
+                                showingRecordDetail = true
+                            }) {
+                                HStack {
+                                    Image(systemName: "pencil")
+                                    Text("詳細記録")
+                                }
+                                .font(.system(size: 14, weight: .medium))
+                                .foregroundColor(.blue)
+                                .padding()
+                                .frame(maxWidth: .infinity)
+                                .background(Color.blue.opacity(0.1))
+                                .cornerRadius(12)
                             }
-                            .font(.system(size: 16, weight: .medium))
-                            .foregroundColor(.blue)
-                            .frame(maxWidth: .infinity, minHeight: 44)
-                            .background(Color.blue.opacity(0.1))
-                            .cornerRadius(12)
-                        }
-                        
-                        // 取り消しボタン
-                        Button(action: {
-                            viewModel.undoLastRecord(for: course)
-                        }) {
-                            HStack {
-                                Image(systemName: "arrow.uturn.backward.circle.fill")
-                                Text("最後の記録を取り消し")
+                            
+                            // 取り消しボタン
+                            Button(action: {
+                                withAnimation(.spring()) {
+                                    viewModel.undoLastRecord(for: course)
+                                }
+                                let impactFeedback = UIImpactFeedbackGenerator(style: .light)
+                                impactFeedback.impactOccurred()
+                            }) {
+                                HStack {
+                                    Image(systemName: "arrow.uturn.backward")
+                                    Text("取り消し")
+                                }
+                                .font(.system(size: 14, weight: .medium))
+                                .foregroundColor(.orange)
+                                .padding()
+                                .frame(maxWidth: .infinity)
+                                .background(Color.orange.opacity(0.1))
+                                .cornerRadius(12)
                             }
-                            .font(.system(size: 16, weight: .medium))
-                            .foregroundColor(.orange)
-                            .frame(maxWidth: .infinity, minHeight: 44)
-                            .background(Color.orange.opacity(0.1))
-                            .cornerRadius(12)
                         }
                     }
-                    .padding()
+                    .padding(.horizontal)
                     
                     Spacer()
                 }

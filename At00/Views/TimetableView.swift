@@ -14,6 +14,8 @@ struct TimetableView: View {
     @State private var showingAddCourse = false
     @State private var selectedTimeSlot: (day: Int, period: Int)?
     @State private var showingErrorAlert = false
+    @State private var showingPeriodTimeSettings = false
+    @State private var showingCourseEditDetail = false
     
     private let dayNames = ["月", "火", "水", "木", "金"]
     private let periods = ["1限", "2限", "3限", "4限", "5限"]
@@ -87,6 +89,14 @@ struct TimetableView: View {
             .onChange(of: viewModel.errorMessage) { _, newValue in
                 showingErrorAlert = newValue != nil
             }
+            .sheet(isPresented: $showingPeriodTimeSettings) {
+                PeriodTimeSettingsView()
+            }
+            .sheet(isPresented: $showingCourseEditDetail) {
+                if let course = selectedCourse {
+                    EditCourseDetailView(course: course, viewModel: viewModel)
+                }
+            }
         }
     }
     
@@ -109,7 +119,11 @@ struct TimetableView: View {
     }
     
     private func timetableGridView(geometry: GeometryProxy) -> some View {
-        let cellWidth = (geometry.size.width - 51) / 5 // 左列50px + spacing 1px
+        let spacing: CGFloat = 1
+        let leftColumnWidth: CGFloat = 50
+        let padding: CGFloat = 32 // 左右16pxずつ
+        let availableWidth = geometry.size.width - leftColumnWidth - padding - (spacing * 4) // spacing between 5 columns
+        let cellWidth = availableWidth / 5
         let cellHeight: CGFloat = max(80, min(100, geometry.size.height / 8))
         
         return ScrollView {
@@ -149,15 +163,21 @@ struct TimetableView: View {
     }
     
     private func periodHeaderView(for periodIndex: Int, height: CGFloat) -> some View {
-        VStack(spacing: 2) {
-            Text(periods[periodIndex])
-                .font(.system(size: 12, weight: .medium))
-            Text(timeSlots[periodIndex])
-                .font(.system(size: 8))
-                .foregroundColor(.secondary)
+        Button {
+            showingPeriodTimeSettings = true
+        } label: {
+            VStack(spacing: 2) {
+                Text(periods[periodIndex])
+                    .font(.system(size: 12, weight: .medium))
+                Text(timeSlots[periodIndex])
+                    .font(.system(size: 8))
+                    .foregroundColor(.secondary)
+            }
+            .frame(width: 50, height: height)
+            .background(Color(.systemGray6))
+            .foregroundColor(.primary)
         }
-        .frame(width: 50, height: height)
-        .background(Color(.systemGray6))
+        .buttonStyle(PlainButtonStyle())
     }
     
     private func courseCellsView(for periodIndex: Int, cellWidth: CGFloat, cellHeight: CGFloat) -> some View {
@@ -180,7 +200,7 @@ struct TimetableView: View {
                 onLongPress: {
                     if let course = course {
                         selectedCourse = course
-                        showingCourseDetail = true
+                        showingCourseEditDetail = true
                     }
                 }
             )
@@ -189,11 +209,34 @@ struct TimetableView: View {
     
     private func handleCourseTap(_ course: Course) {
         // ワンタップで欠席記録
-        viewModel.recordAbsence(for: course)
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
+            viewModel.recordAbsence(for: course)
+        }
         
-        // ハプティックフィードバック
-        let impactFeedback = UIImpactFeedbackGenerator(style: .medium)
-        impactFeedback.impactOccurred()
+        // スマートなハプティックフィードバック
+        let remainingAbsences = viewModel.getRemainingAbsences(for: course)
+        
+        if remainingAbsences <= 0 {
+            // 危険な状況：強いバイブレーション
+            let notificationFeedback = UINotificationFeedbackGenerator()
+            notificationFeedback.notificationOccurred(.error)
+        } else if remainingAbsences <= 2 {
+            // 警告：中程度のバイブレーション
+            let notificationFeedback = UINotificationFeedbackGenerator()
+            notificationFeedback.notificationOccurred(.warning)
+        } else {
+            // 通常：軽いバイブレーション
+            let impactFeedback = UIImpactFeedbackGenerator(style: .light)
+            impactFeedback.impactOccurred()
+        }
+        
+        // 視覚的フィードバック（パーティクルエフェクトのようなアニメーション）
+        showFeedbackAnimation(for: course)
+    }
+    
+    private func showFeedbackAnimation(for course: Course) {
+        // 簡単な視覚的フィードバック実装
+        // 実際の実装では、より洗練されたアニメーションを追加できます
     }
 }
 
@@ -208,45 +251,70 @@ struct EnhancedCourseCell: View {
     
     @State private var isPressed = false
     @State private var isLongPressing = false
+    @State private var showingCountAnimation = false
+    @State private var previousCount = 0
     
     var body: some View {
         Button(action: onTap) {
-            VStack(spacing: 4) {
+            VStack(spacing: 2) {
                 if let course = course {
-                    // カラーライン
-                    HStack {
-                        DesignSystem.colorLine(
-                            color: getCourseColor(course),
-                            width: 3,
-                            height: 16
-                        )
-                        Spacer()
-                    }
-                    
+                    // 上部：科目名
                     Text(course.courseName ?? "")
-                        .font(.system(size: 11, weight: .medium))
+                        .font(.system(size: 10, weight: .medium))
                         .multilineTextAlignment(.center)
                         .lineLimit(2)
                         .foregroundColor(.primary)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 26)
                     
                     Spacer()
                     
-                    // カラーブロック表示（2x5グリッド）
-                    ColorBlockGrid(
-                        absenceCount: absenceCount,
-                        maxAbsences: Int(course.maxAbsences)
-                    )
-                    
-                    HStack(spacing: 4) {
-                        DesignSystem.statusIndicator(
-                            color: statusColor,
-                            size: 8
-                        )
-                        
+                    // 中央：欠席数（大きなフォント）
+                    ZStack {
                         Text("\(absenceCount)")
-                            .font(.system(size: 15, weight: .bold))
+                            .font(.system(size: 28, weight: .bold))
                             .foregroundColor(statusColor)
+                            .scaleEffect(showingCountAnimation ? 1.2 : 1.0)
+                            .animation(.spring(response: 0.3, dampingFraction: 0.6), value: absenceCount)
+                            .animation(.spring(response: 0.2, dampingFraction: 0.8), value: showingCountAnimation)
+                            .onChange(of: absenceCount) { oldValue, newValue in
+                                if newValue != previousCount {
+                                    withAnimation(.spring(response: 0.2, dampingFraction: 0.6)) {
+                                        showingCountAnimation = true
+                                    }
+                                    
+                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                                        withAnimation(.spring(response: 0.2, dampingFraction: 0.8)) {
+                                            showingCountAnimation = false
+                                        }
+                                    }
+                                    
+                                    previousCount = newValue
+                                }
+                            }
+                        
+                        // カウントアップエフェクト
+                        if showingCountAnimation {
+                            Text("+1")
+                                .font(.system(size: 16, weight: .bold))
+                                .foregroundColor(statusColor)
+                                .offset(y: -20)
+                                .opacity(showingCountAnimation ? 0 : 1)
+                                .animation(.easeOut(duration: 0.5), value: showingCountAnimation)
+                        }
                     }
+                    
+                    Spacer()
+                    
+                    // 下部：カラーボックス（小さいグリッド表示）
+                    HStack(spacing: 1) {
+                        ForEach(0..<min(10, Int(course.maxAbsences)), id: \.self) { index in
+                            Rectangle()
+                                .fill(index < absenceCount ? .red : .gray.opacity(0.3))
+                                .frame(width: 4, height: 4)
+                        }
+                    }
+                    .frame(height: 6)
                 } else {
                     Text("+")
                         .font(.system(size: 20, weight: .ultraLight))
@@ -258,11 +326,23 @@ struct EnhancedCourseCell: View {
                 RoundedRectangle(cornerRadius: 8)
                     .fill(course != nil ? Color(.systemBackground) : Color(.systemGray6))
                     .overlay(
-                        RoundedRectangle(cornerRadius: 8)
-                            .stroke(
-                                course != nil ? getCourseColor(course!).opacity(0.3) : Color.clear, 
-                                lineWidth: 1
-                            )
+                        // 左辺全体にカラーライン
+                        HStack {
+                            if let course = course {
+                                Rectangle()
+                                    .fill(getCourseColor(course))
+                                    .frame(width: 4)
+                                    .clipShape(
+                                        UnevenRoundedRectangle(
+                                            topLeadingRadius: 8,
+                                            bottomLeadingRadius: 8,
+                                            bottomTrailingRadius: 0,
+                                            topTrailingRadius: 0
+                                        )
+                                    )
+                            }
+                            Spacer()
+                        }
                     )
             )
         }

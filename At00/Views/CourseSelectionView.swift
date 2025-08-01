@@ -39,25 +39,24 @@ struct CourseSelectionView: View {
                 .padding()
                 
                 // コンテンツ
-                TabView(selection: $selectedTab) {
-                    // 既存授業選択タブ
-                    ExistingCourseSelectionView(
-                        dayOfWeek: dayOfWeek,
-                        period: period,
-                        viewModel: viewModel,
-                        availableCourses: availableExistingCourses
-                    )
-                    .tag(CourseSelectionTab.existing)
-                    
-                    // 新規作成タブ
-                    NewCourseCreationView(
-                        dayOfWeek: dayOfWeek,
-                        period: period,
-                        viewModel: viewModel
-                    )
-                    .tag(CourseSelectionTab.new)
+                Group {
+                    if selectedTab == .existing {
+                        ExistingCourseSelectionView(
+                            dayOfWeek: dayOfWeek,
+                            period: period,
+                            viewModel: viewModel,
+                            availableCourses: availableExistingCourses
+                        )
+                        .transition(.asymmetric(insertion: .move(edge: .leading), removal: .move(edge: .trailing)))
+                    } else {
+                        NewCourseCreationView(
+                            dayOfWeek: dayOfWeek,
+                            period: period,
+                            viewModel: viewModel
+                        )
+                        .transition(.asymmetric(insertion: .move(edge: .trailing), removal: .move(edge: .leading)))
+                    }
                 }
-                .tabViewStyle(PageTabViewStyle(indexDisplayMode: .never))
             }
             .navigationTitle("授業選択")
             .navigationBarTitleDisplayMode(.inline)
@@ -71,6 +70,7 @@ struct CourseSelectionView: View {
             .onAppear {
                 loadAvailableExistingCourses()
             }
+            .animation(.easeInOut(duration: 0.3), value: selectedTab)
         }
     }
     
