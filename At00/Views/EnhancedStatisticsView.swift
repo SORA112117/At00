@@ -355,12 +355,7 @@ struct EnhancedStatisticsView: View {
     }
 }
 
-// Array安全アクセス用の拡張
-extension Array {
-    subscript(safe index: Index) -> Element? {
-        return indices.contains(index) ? self[index] : nil
-    }
-}
+// Array安全アクセス用の拡張はDesignSystem.swiftで定義済みのため削除
 
 #Preview {
     EnhancedStatisticsView()

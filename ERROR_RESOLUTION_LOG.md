@@ -241,6 +241,62 @@ course != nil ? getCourseColor(course!).opacity(0.3) : Color.clear
 
 ---
 
+## 2025-08-01: AttendanceManager機能移植時のエラー群
+
+### 9. Array extension重複定義エラー
+**エラー内容:**
+```
+Invalid redeclaration of 'subscript(safe:)'
+```
+
+**原因:**
+- DesignSystem.swiftとEnhancedStatisticsView.swiftの両方で`Array`の`subscript(safe:)`拡張を定義
+- Swiftでは同一拡張の重複定義は許可されない
+
+**対策:**
+```swift
+// EnhancedStatisticsView.swiftから重複定義を削除
+// Array安全アクセス用の拡張はDesignSystem.swiftで定義済みのため削除
+```
+
+**予防策:**
+- プロジェクト全体で拡張は一箇所にまとめる
+- 既存の拡張を確認してから新規追加
+- 共通ユーティリティは中央集約する
+
+---
+
+### 10. Core Data Boolean属性の型エラー
+**エラー内容:**
+```
+Cannot assign value of type 'Bool' to type 'NSNumber'
+```
+
+**原因:**
+- Core DataのBoolean属性で`usesScalarValueType="NO"`が設定されている
+- これによりSwiftでNSNumber型として扱われ、Bool値の直接代入ができない
+
+**対策:**
+```xml
+<!-- 修正前 -->
+<attribute name="isActive" optional="NO" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="NO"/>
+
+<!-- 修正後 -->
+<attribute name="isActive" optional="NO" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES"/>
+```
+
+**影響範囲:**
+- Semester.isActive
+- Course.isFullYear  
+- Course.isNotificationEnabled
+
+**予防策:**
+- Core DataでBoolean属性を作成時は`usesScalarValueType="YES"`を設定
+- Xcodeのデータモデルエディタで「Uses Scalar Value Type」をチェック
+- 新規属性追加時は既存パターンとの一貫性を確認
+
+---
+
 ## 参考リンク
 - [SwiftUI ViewBuilder制限について](https://developer.apple.com/documentation/swiftui/viewbuilder)
 - [Core Data Best Practices](https://developer.apple.com/library/archive/documentation/Cocoa/Conceptual/CoreData/)

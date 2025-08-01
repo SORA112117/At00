@@ -6,9 +6,9 @@
         <attribute name="period" optional="NO" attributeType="Integer 16"/>
         <attribute name="maxAbsences" optional="YES" attributeType="Integer 16" defaultValueString="0"/>
         <attribute name="totalClasses" optional="YES" attributeType="Integer 16" defaultValueString="15"/>
-        <attribute name="isNotificationEnabled" optional="YES" attributeType="Boolean" defaultValueString="YES"/>
+        <attribute name="isNotificationEnabled" optional="YES" attributeType="Boolean" defaultValueString="YES" usesScalarValueType="YES"/>
         <attribute name="courseId" optional="NO" attributeType="UUID" usesScalarValueType="NO"/>
-        <attribute name="isFullYear" optional="YES" attributeType="Boolean" defaultValueString="NO"/>
+        <attribute name="isFullYear" optional="YES" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES"/>
         <attribute name="colorIndex" optional="YES" attributeType="Integer 16" defaultValueString="0"/>
         <relationship name="semester" optional="NO" maxCount="1" deletionRule="Nullify" destinationEntity="Semester" inverseName="courses" inverseEntity="Semester"/>
         <relationship name="attendanceRecords" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="AttendanceRecord" inverseName="course" inverseEntity="AttendanceRecord"/>
@@ -26,7 +26,7 @@
         <attribute name="name" optional="NO" attributeType="String"/>
         <attribute name="startDate" optional="NO" attributeType="Date" usesScalarValueType="NO"/>
         <attribute name="endDate" optional="NO" attributeType="Date" usesScalarValueType="NO"/>
-        <attribute name="isActive" optional="NO" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="NO"/>
+        <attribute name="isActive" optional="NO" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES"/>
         <attribute name="createdAt" optional="NO" attributeType="Date" usesScalarValueType="NO"/>
         <attribute name="semesterType" optional="YES" attributeType="String" defaultValueString="firstHalf"/>
         <relationship name="courses" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="Course" inverseName="semester" inverseEntity="Course"/>
