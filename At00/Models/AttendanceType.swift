@@ -39,12 +39,12 @@ enum AttendanceType: String, CaseIterable {
         }
     }
     
-    // 単位に影響するかどうか
+    // 単位に影響するかどうか（欠席のみをカウント）
     var affectsCredit: Bool {
         switch self {
-        case .absent, .late, .earlyLeave:
+        case .absent:
             return true
-        case .officialAbsent:
+        case .late, .earlyLeave, .officialAbsent:
             return false
         }
     }

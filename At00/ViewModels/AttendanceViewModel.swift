@@ -184,6 +184,45 @@ class AttendanceViewModel: ObservableObject {
         loadTimetable()
     }
     
+    // 既存授業を新しい時間割位置に配置
+    func assignExistingCourse(course: Course, newDayOfWeek: Int, newPeriod: Int) {
+        guard let semester = currentSemester else { return }
+        
+        // 既存の授業の複製を作成
+        let newCourse = Course(context: context)
+        newCourse.courseId = UUID()
+        newCourse.courseName = course.courseName
+        newCourse.dayOfWeek = Int16(newDayOfWeek)
+        newCourse.period = Int16(newPeriod)
+        newCourse.totalClasses = course.totalClasses
+        newCourse.maxAbsences = course.maxAbsences
+        newCourse.semester = semester
+        newCourse.isNotificationEnabled = course.isNotificationEnabled
+        newCourse.isFullYear = course.isFullYear
+        newCourse.colorIndex = course.colorIndex
+        
+        // 通年科目の場合、もう一方の学期にも配置
+        if course.isFullYear {
+            let otherType: SemesterType = (currentSemesterType == .firstHalf) ? .secondHalf : .firstHalf
+            if let otherSemester = availableSemesters.first(where: { $0.semesterType == otherType.rawValue }) {
+                let otherCourse = Course(context: context)
+                otherCourse.courseId = UUID()
+                otherCourse.courseName = course.courseName
+                otherCourse.dayOfWeek = Int16(newDayOfWeek)
+                otherCourse.period = Int16(newPeriod)
+                otherCourse.totalClasses = course.totalClasses
+                otherCourse.maxAbsences = course.maxAbsences
+                otherCourse.semester = otherSemester
+                otherCourse.isNotificationEnabled = course.isNotificationEnabled
+                otherCourse.isFullYear = course.isFullYear
+                otherCourse.colorIndex = course.colorIndex
+            }
+        }
+        
+        saveContext()
+        loadTimetable()
+    }
+    
     // 授業を削除
     func deleteCourse(_ course: Course) {
         context.delete(course)

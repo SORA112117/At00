@@ -7,6 +7,8 @@
 
 import SwiftUI
 import CoreData
+import UserNotifications
+import LocalAuthentication
 
 struct SettingsView: View {
     @StateObject private var viewModel = AttendanceViewModel()
@@ -45,8 +47,23 @@ struct SettingsView: View {
                         CourseManagementView(viewModel: viewModel)
                     }
                     
+                    NavigationLink("時限時間設定") {
+                        PeriodTimeSettingsView()
+                    }
+                    
                     NavigationLink("通知設定") {
                         NotificationSettingsView()
+                    }
+                }
+                
+                // 外観・セキュリティセクション
+                Section("外観・セキュリティ") {
+                    NavigationLink("外観設定") {
+                        AppearanceSettingsView()
+                    }
+                    
+                    NavigationLink("セキュリティ設定") {
+                        SecuritySettingsView()
                     }
                 }
                 
@@ -334,16 +351,314 @@ struct CourseEditView: View {
     }
 }
 
-// 追加のView（簡単な実装）
+// MARK: - 強化された設定ビュー群
+
 struct NotificationSettingsView: View {
+    @AppStorage("notificationsEnabled") private var notificationsEnabled = false
+    @AppStorage("absentLimitNotification") private var absentLimitNotification = true
+    @AppStorage("reminderNotification") private var reminderNotification = false
+    @AppStorage("reminderTime") private var reminderTimeData = Data()
+    @AppStorage("reminderFrequency") private var reminderFrequency = "daily"
+    
+    @State private var reminderTime = Date()
+    @State private var showingReminderSettings = false
+    
+    let reminderFrequencies = [
+        ("daily", "毎日"),
+        ("weekly", "週1回"),
+        ("monthly", "月1回")
+    ]
+    
     var body: some View {
         List {
-            Section("通知設定") {
-                Toggle("プッシュ通知を有効にする", isOn: .constant(true))
-                Toggle("欠席回数が上限に近づいたら通知", isOn: .constant(true))
+            Section("基本通知設定") {
+                Toggle("プッシュ通知を有効にする", isOn: $notificationsEnabled)
+                    .onChange(of: notificationsEnabled) { _, newValue in
+                        if newValue {
+                            requestNotificationPermission()
+                        }
+                    }
+                
+                if notificationsEnabled {
+                    Toggle("欠席回数が上限に近づいたら通知", isOn: $absentLimitNotification)
+                }
+            }
+            
+            if notificationsEnabled {
+                Section("リマインダー通知") {
+                    Toggle("入力をお忘れですか？通知", isOn: $reminderNotification)
+                        .onChange(of: reminderNotification) { _, newValue in
+                            withAnimation(.easeInOut(duration: 0.3)) {
+                                showingReminderSettings = newValue
+                            }
+                        }
+                    
+                    if showingReminderSettings && reminderNotification {
+                        DatePicker("通知時刻", selection: $reminderTime, displayedComponents: .hourAndMinute)
+                            .onChange(of: reminderTime) { _, newValue in
+                                saveReminderTime(newValue)
+                            }
+                        
+                        Picker("頻度", selection: $reminderFrequency) {
+                            ForEach(reminderFrequencies, id: \.0) { frequency, name in
+                                Text(name).tag(frequency)
+                            }
+                        }
+                        
+                        Text("設定した時刻に出席記録の入力を促す通知が届きます")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                }
             }
         }
         .navigationTitle("通知設定")
+        .onAppear {
+            loadReminderTime()
+            showingReminderSettings = reminderNotification
+        }
+    }
+    
+    private func requestNotificationPermission() {
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .badge, .sound]) { granted, error in
+            DispatchQueue.main.async {
+                if !granted {
+                    notificationsEnabled = false
+                }
+            }
+        }
+    }
+    
+    private func saveReminderTime(_ time: Date) {
+        if let encoded = try? JSONEncoder().encode(time) {
+            reminderTimeData = encoded
+        }
+    }
+    
+    private func loadReminderTime() {
+        if let decoded = try? JSONDecoder().decode(Date.self, from: reminderTimeData) {
+            reminderTime = decoded
+        } else {
+            reminderTime = Calendar.current.date(from: DateComponents(hour: 18, minute: 0)) ?? Date()
+        }
+    }
+}
+
+struct AppearanceSettingsView: View {
+    @AppStorage("appearanceMode") private var appearanceMode = "system"
+    
+    let appearanceModes = [
+        ("system", "システム設定に従う"),
+        ("light", "ライトモード"),
+        ("dark", "ダークモード")
+    ]
+    
+    var body: some View {
+        List {
+            Section("外観設定") {
+                Picker("テーマ", selection: $appearanceMode) {
+                    ForEach(appearanceModes, id: \.0) { mode, name in
+                        Text(name).tag(mode)
+                    }
+                }
+                .onChange(of: appearanceMode) { _, newValue in
+                    withAnimation(.easeInOut(duration: 0.3)) {
+                        applyAppearanceMode(newValue)
+                    }
+                }
+                
+                Text("アプリの外観を設定できます。システム設定に従う場合、デバイスの設定に応じて自動的に切り替わります。")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+        }
+        .navigationTitle("外観設定")
+    }
+    
+    private func applyAppearanceMode(_ mode: String) {
+        guard let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+              let window = windowScene.windows.first else { return }
+        
+        switch mode {
+        case "light":
+            window.overrideUserInterfaceStyle = .light
+        case "dark":
+            window.overrideUserInterfaceStyle = .dark
+        default:
+            window.overrideUserInterfaceStyle = .unspecified
+        }
+    }
+}
+
+struct SecuritySettingsView: View {
+    @AppStorage("passcodeEnabled") private var passcodeEnabled = false
+    @AppStorage("biometricEnabled") private var biometricEnabled = false
+    @State private var showingPasscodeSetup = false
+    @State private var biometricType: String = ""
+    
+    var body: some View {
+        List {
+            Section("セキュリティ設定") {
+                Toggle("パスコードロック", isOn: $passcodeEnabled)
+                    .onChange(of: passcodeEnabled) { _, newValue in
+                        if newValue {
+                            showingPasscodeSetup = true
+                        }
+                    }
+                
+                if passcodeEnabled {
+                    Toggle("\(biometricType)認証", isOn: $biometricEnabled)
+                        .disabled(biometricType.isEmpty)
+                }
+                
+                if passcodeEnabled || biometricEnabled {
+                    Text("アプリを開く際に認証が必要になります。セキュリティを向上させるために設定をお勧めします。")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            }
+        }
+        .navigationTitle("セキュリティ設定")
+        .sheet(isPresented: $showingPasscodeSetup) {
+            PasscodeSetupView(isPresented: $showingPasscodeSetup)
+        }
+        .onAppear {
+            checkBiometricAvailability()
+        }
+    }
+    
+    private func checkBiometricAvailability() {
+        let context = LAContext()
+        var error: NSError?
+        
+        if context.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: &error) {
+            switch context.biometryType {
+            case .faceID:
+                biometricType = "Face ID"
+            case .touchID:
+                biometricType = "Touch ID"
+            default:
+                biometricType = "生体"
+            }
+        } else {
+            biometricType = ""
+        }
+    }
+}
+
+struct PasscodeSetupView: View {
+    @Binding var isPresented: Bool
+    @State private var passcode = ""
+    @State private var confirmPasscode = ""
+    @State private var step: SetupStep = .initial
+    @State private var showingError = false
+    @State private var errorMessage = ""
+    
+    enum SetupStep {
+        case initial, confirm, complete
+    }
+    
+    var body: some View {
+        NavigationView {
+            VStack(spacing: 20) {
+                Text(stepTitle)
+                    .font(.title2)
+                    .fontWeight(.medium)
+                    .multilineTextAlignment(.center)
+                    .padding()
+                
+                SecureField("パスコードを入力", text: currentBinding)
+                    .textFieldStyle(RoundedBorderTextFieldStyle())
+                    .keyboardType(.numberPad)
+                    .frame(maxWidth: 200)
+                
+                if step == .confirm && !passcode.isEmpty && !confirmPasscode.isEmpty && passcode != confirmPasscode {
+                    Text("パスコードが一致しません")
+                        .foregroundColor(.red)
+                        .font(.caption)
+                }
+                
+                Spacer()
+            }
+            .padding()
+            .navigationTitle("パスコード設定")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("キャンセル") {
+                        isPresented = false
+                    }
+                }
+                
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("次へ") {
+                        handleNextStep()
+                    }
+                    .disabled(!canProceed)
+                }
+            }
+        }
+        .alert("エラー", isPresented: $showingError) {
+            Button("OK") {}
+        } message: {
+            Text(errorMessage)
+        }
+    }
+    
+    private var stepTitle: String {
+        switch step {
+        case .initial:
+            return "4桁のパスコードを設定してください"
+        case .confirm:
+            return "パスコードを再入力してください"
+        case .complete:
+            return "パスコードが設定されました"
+        }
+    }
+    
+    private var currentBinding: Binding<String> {
+        switch step {
+        case .initial, .complete:
+            return $passcode
+        case .confirm:
+            return $confirmPasscode
+        }
+    }
+    
+    private var canProceed: Bool {
+        switch step {
+        case .initial:
+            return passcode.count == 4
+        case .confirm:
+            return confirmPasscode.count == 4 && passcode == confirmPasscode
+        case .complete:
+            return true
+        }
+    }
+    
+    private func handleNextStep() {
+        switch step {
+        case .initial:
+            step = .confirm
+        case .confirm:
+            if passcode == confirmPasscode {
+                savePasscode()
+                step = .complete
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
+                    isPresented = false
+                }
+            } else {
+                errorMessage = "パスコードが一致しません"
+                showingError = true
+            }
+        case .complete:
+            isPresented = false
+        }
+    }
+    
+    private func savePasscode() {
+        // 実際の実装では、パスコードをキーチェーンに安全に保存する必要があります
+        UserDefaults.standard.set(passcode, forKey: "userPasscode")
     }
 }
 

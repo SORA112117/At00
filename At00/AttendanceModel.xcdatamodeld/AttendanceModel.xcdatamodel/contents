@@ -31,4 +31,10 @@
         <attribute name="semesterType" optional="YES" attributeType="String" defaultValueString="firstHalf"/>
         <relationship name="courses" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="Course" inverseName="semester" inverseEntity="Course"/>
     </entity>
+    <entity name="PeriodTime" representedClassName="PeriodTime" syncable="YES" codeGenerationType="class">
+        <attribute name="period" optional="NO" attributeType="Integer 16"/>
+        <attribute name="startTime" optional="NO" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="endTime" optional="NO" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="semesterId" optional="NO" attributeType="UUID" usesScalarValueType="NO"/>
+    </entity>
 </model>

@@ -10,12 +10,12 @@ import CoreData
 
 struct EnhancedStatisticsView: View {
     @StateObject private var viewModel = AttendanceViewModel()
-    @State private var selectedTimeFrame: TimeFrame = .weekly
+    @State private var selectedTimeFrame: TimeFrame = .monthly
     @State private var selectedPeriod = Date()
     
     enum TimeFrame: String, CaseIterable {
-        case weekly = "週"
         case monthly = "月"
+        case yearly = "年"
         
         var displayName: String { rawValue }
     }
@@ -25,28 +25,27 @@ struct EnhancedStatisticsView: View {
         let calendar = Calendar.current
         
         switch selectedTimeFrame {
-        case .weekly:
-            let startOfWeek = calendar.dateInterval(of: .weekOfYear, for: selectedPeriod)?.start ?? selectedPeriod
-            let endOfWeek = calendar.date(byAdding: .day, value: 6, to: startOfWeek) ?? selectedPeriod
-            return (startOfWeek, endOfWeek)
         case .monthly:
             let startOfMonth = calendar.dateInterval(of: .month, for: selectedPeriod)?.start ?? selectedPeriod
             let endOfMonth = calendar.dateInterval(of: .month, for: selectedPeriod)?.end ?? selectedPeriod
             return (startOfMonth, endOfMonth)
+        case .yearly:
+            let startOfYear = calendar.dateInterval(of: .year, for: selectedPeriod)?.start ?? selectedPeriod
+            let endOfYear = calendar.dateInterval(of: .year, for: selectedPeriod)?.end ?? selectedPeriod
+            return (startOfYear, endOfYear)
         }
     }
     
     // 期間の表示テキスト
     private var periodDisplayText: String {
         let formatter = DateFormatter()
-        let (start, end) = currentPeriodDates
         
         switch selectedTimeFrame {
-        case .weekly:
-            formatter.dateFormat = "M/d"
-            return "\(formatter.string(from: start)) - \(formatter.string(from: end))"
         case .monthly:
             formatter.dateFormat = "yyyy年M月"
+            return formatter.string(from: selectedPeriod)
+        case .yearly:
+            formatter.dateFormat = "yyyy年"
             return formatter.string(from: selectedPeriod)
         }
     }
@@ -315,10 +314,10 @@ struct EnhancedStatisticsView: View {
     private func previousPeriod() {
         withAnimation {
             switch selectedTimeFrame {
-            case .weekly:
-                selectedPeriod = Calendar.current.date(byAdding: .weekOfYear, value: -1, to: selectedPeriod) ?? selectedPeriod
             case .monthly:
                 selectedPeriod = Calendar.current.date(byAdding: .month, value: -1, to: selectedPeriod) ?? selectedPeriod
+            case .yearly:
+                selectedPeriod = Calendar.current.date(byAdding: .year, value: -1, to: selectedPeriod) ?? selectedPeriod
             }
         }
     }
@@ -326,10 +325,10 @@ struct EnhancedStatisticsView: View {
     private func nextPeriod() {
         withAnimation {
             switch selectedTimeFrame {
-            case .weekly:
-                selectedPeriod = Calendar.current.date(byAdding: .weekOfYear, value: 1, to: selectedPeriod) ?? selectedPeriod
             case .monthly:
                 selectedPeriod = Calendar.current.date(byAdding: .month, value: 1, to: selectedPeriod) ?? selectedPeriod
+            case .yearly:
+                selectedPeriod = Calendar.current.date(byAdding: .year, value: 1, to: selectedPeriod) ?? selectedPeriod
             }
         }
     }

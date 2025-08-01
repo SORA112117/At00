@@ -69,7 +69,7 @@ struct TimetableView: View {
             }
             .sheet(isPresented: $showingAddCourse) {
                 if let timeSlot = selectedTimeSlot {
-                    AddCourseView(
+                    CourseSelectionView(
                         dayOfWeek: timeSlot.day,
                         period: timeSlot.period,
                         viewModel: viewModel
