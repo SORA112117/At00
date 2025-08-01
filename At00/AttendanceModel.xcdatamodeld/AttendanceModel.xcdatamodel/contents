@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<model type="com.apple.IDECoreDataModeler.DataModel" documentVersion="1.0" lastSavedToolsVersion="21754" systemVersion="22F82" minimumToolsVersion="Automatic" sourceLanguage="Swift" userDefinedModelVersionIdentifier="">
+    <entity name="Course" representedClassName="Course" syncable="YES" codeGenerationType="class">
+        <attribute name="courseName" optional="NO" attributeType="String"/>
+        <attribute name="dayOfWeek" optional="NO" attributeType="Integer 16"/>
+        <attribute name="period" optional="NO" attributeType="Integer 16"/>
+        <attribute name="maxAbsences" optional="YES" attributeType="Integer 16" defaultValueString="0"/>
+        <attribute name="totalClasses" optional="YES" attributeType="Integer 16" defaultValueString="15"/>
+        <attribute name="isNotificationEnabled" optional="YES" attributeType="Boolean" defaultValueString="YES"/>
+        <attribute name="courseId" optional="NO" attributeType="UUID" usesScalarValueType="NO"/>
+        <relationship name="semester" optional="NO" maxCount="1" deletionRule="Nullify" destinationEntity="Semester" inverseName="courses" inverseEntity="Semester"/>
+        <relationship name="attendanceRecords" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="AttendanceRecord" inverseName="course" inverseEntity="AttendanceRecord"/>
+    </entity>
+    <entity name="AttendanceRecord" representedClassName="AttendanceRecord" syncable="YES" codeGenerationType="class">
+        <attribute name="recordId" optional="NO" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="date" optional="NO" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="type" optional="NO" attributeType="String"/>
+        <attribute name="memo" optional="YES" attributeType="String"/>
+        <attribute name="createdAt" optional="NO" attributeType="Date" usesScalarValueType="NO"/>
+        <relationship name="course" optional="NO" maxCount="1" deletionRule="Nullify" destinationEntity="Course" inverseName="attendanceRecords" inverseEntity="Course"/>
+    </entity>
+    <entity name="Semester" representedClassName="Semester" syncable="YES" codeGenerationType="class">
+        <attribute name="semesterId" optional="NO" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="name" optional="NO" attributeType="String"/>
+        <attribute name="startDate" optional="NO" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="endDate" optional="NO" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="isActive" optional="NO" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="NO"/>
+        <attribute name="createdAt" optional="NO" attributeType="Date" usesScalarValueType="NO"/>
+        <relationship name="courses" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="Course" inverseName="semester" inverseEntity="Course"/>
+    </entity>
+</model>
