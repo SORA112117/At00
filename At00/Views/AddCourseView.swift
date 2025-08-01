@@ -16,6 +16,8 @@ struct AddCourseView: View {
     @State private var courseName = ""
     @State private var totalClasses = 15
     @State private var maxAbsences = 5
+    @State private var isFullYear = false
+    @State private var selectedColorIndex = 0
     
     private let dayNames = ["", "月", "火", "水", "木", "金", "土", "日"]
     
@@ -41,6 +43,34 @@ struct AddCourseView: View {
                             // 総授業回数が変更されたら、デフォルトの最大欠席可能回数を調整
                             maxAbsences = max(1, newValue / 3)
                         }
+                    
+                    Toggle("通年科目", isOn: $isFullYear)
+                        .onChange(of: isFullYear) { _, newValue in
+                            if newValue {
+                                totalClasses = 30  // 通年科目は自動的に30回に設定
+                                maxAbsences = 10
+                            } else {
+                                totalClasses = 15
+                                maxAbsences = 5
+                            }
+                        }
+                    
+                    HStack {
+                        Text("カラー")
+                        Spacer()
+                        ForEach(0..<8, id: \.self) { index in
+                            Circle()
+                                .fill(DesignSystem.getColor(for: index))
+                                .frame(width: 30, height: 30)
+                                .overlay(
+                                    Circle()
+                                        .stroke(Color.primary, lineWidth: selectedColorIndex == index ? 3 : 0)
+                                )
+                                .onTapGesture {
+                                    selectedColorIndex = index
+                                }
+                        }
+                    }
                 }
                 
                 Section {
@@ -64,7 +94,9 @@ struct AddCourseView: View {
                             name: courseName,
                             dayOfWeek: dayOfWeek,
                             period: period,
-                            totalClasses: totalClasses
+                            totalClasses: totalClasses,
+                            isFullYear: isFullYear,
+                            colorIndex: selectedColorIndex
                         )
                         dismiss()
                     }

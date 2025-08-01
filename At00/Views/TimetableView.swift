@@ -31,6 +31,31 @@ struct TimetableView: View {
             .navigationTitle("授業欠席管理")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Menu {
+                        ForEach(SemesterType.allCases, id: \.self) { type in
+                            Button(action: {
+                                withAnimation(.easeInOut(duration: 0.3)) {
+                                    viewModel.switchSemester(to: type)
+                                }
+                            }) {
+                                Label(type.displayName, systemImage: type.icon)
+                                if viewModel.currentSemesterType == type {
+                                    Image(systemName: "checkmark")
+                                }
+                            }
+                        }
+                    } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: viewModel.currentSemesterType.icon)
+                            Text(viewModel.currentSemesterType.displayName)
+                                .font(.subheadline)
+                                .fontWeight(.medium)
+                        }
+                        .foregroundColor(.blue)
+                    }
+                }
+                
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button("設定") {
                         // 設定画面を表示
@@ -206,6 +231,12 @@ struct EnhancedCourseCell: View {
                     
                     Spacer()
                     
+                    // カラーブロック表示（2x5グリッド）
+                    ColorBlockGrid(
+                        absenceCount: absenceCount,
+                        maxAbsences: Int(course.maxAbsences)
+                    )
+                    
                     HStack(spacing: 4) {
                         DesignSystem.statusIndicator(
                             color: statusColor,
@@ -259,9 +290,7 @@ struct EnhancedCourseCell: View {
     }
     
     private func getCourseColor(_ course: Course) -> Color {
-        // 仮のカラーインデックス（実際にはCourseモデルにcolorIndexプロパティを追加する必要があります）
-        let colorIndex = abs(course.courseName?.hash ?? 0) % DesignSystem.colorPalette.count
-        return DesignSystem.getColor(for: colorIndex)
+        return DesignSystem.getColor(for: Int(course.colorIndex))
     }
 }
 

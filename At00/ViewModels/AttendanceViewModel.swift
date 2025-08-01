@@ -14,6 +14,8 @@ class AttendanceViewModel: ObservableObject {
     @Published var timetable: [[Course?]] = Array(repeating: Array(repeating: nil, count: 5), count: 5)
     @Published var isLoading = false
     @Published var errorMessage: String?
+    @Published var currentSemesterType: SemesterType = .firstHalf
+    @Published var availableSemesters: [Semester] = []
     
     let persistenceController: PersistenceController
     private let context: NSManagedObjectContext
@@ -25,6 +27,7 @@ class AttendanceViewModel: ObservableObject {
     init(persistenceController: PersistenceController = .shared) {
         self.persistenceController = persistenceController
         self.context = persistenceController.container.viewContext
+        setupSemesters()
         loadCurrentSemester()
         loadTimetable()
     }
@@ -40,7 +43,13 @@ class AttendanceViewModel: ObservableObject {
         
         do {
             let semesters = try context.fetch(request)
-            currentSemester = semesters.first
+            if let semester = semesters.first {
+                currentSemester = semester
+                if let typeString = semester.semesterType,
+                   let type = SemesterType(rawValue: typeString) {
+                    currentSemesterType = type
+                }
+            }
         } catch {
             errorMessage = "学期データの読み込みに失敗しました: \(error.localizedDescription)"
         }
@@ -138,7 +147,7 @@ class AttendanceViewModel: ObservableObject {
     }
     
     // 新しい授業を追加
-    func addCourse(name: String, dayOfWeek: Int, period: Int, totalClasses: Int = 15) {
+    func addCourse(name: String, dayOfWeek: Int, period: Int, totalClasses: Int = 15, isFullYear: Bool = false, colorIndex: Int = 0) {
         guard let semester = currentSemester else { return }
         
         let course = Course(context: context)
@@ -150,6 +159,26 @@ class AttendanceViewModel: ObservableObject {
         course.maxAbsences = Int16(totalClasses / 3) // デフォルト: 1/3まで欠席可能
         course.semester = semester
         course.isNotificationEnabled = true
+        course.isFullYear = isFullYear
+        course.colorIndex = Int16(colorIndex)
+        
+        // 通年科目の場合、もう一方の学期にも同じ授業を追加
+        if isFullYear {
+            let otherType: SemesterType = (currentSemesterType == .firstHalf) ? .secondHalf : .firstHalf
+            if let otherSemester = availableSemesters.first(where: { $0.semesterType == otherType.rawValue }) {
+                let otherCourse = Course(context: context)
+                otherCourse.courseId = UUID()
+                otherCourse.courseName = name
+                otherCourse.dayOfWeek = Int16(dayOfWeek)
+                otherCourse.period = Int16(period)
+                otherCourse.totalClasses = Int16(totalClasses)
+                otherCourse.maxAbsences = Int16(totalClasses / 3)
+                otherCourse.semester = otherSemester
+                otherCourse.isNotificationEnabled = true
+                otherCourse.isFullYear = isFullYear
+                otherCourse.colorIndex = Int16(colorIndex)
+            }
+        }
         
         saveContext()
         loadTimetable()
@@ -165,6 +194,93 @@ class AttendanceViewModel: ObservableObject {
     // データを保存（外部からアクセス可能）
     func save() {
         saveContext()
+    }
+    
+    // 学期を切り替える
+    func switchSemester(to type: SemesterType) {
+        currentSemesterType = type
+        loadSemesterByType(type)
+        loadTimetable()
+    }
+    
+    // 学期の初期設定
+    private func setupSemesters() {
+        loadAllSemesters()
+        
+        // 前期・後期の学期がなければ作成
+        if !hasSemester(of: .firstHalf) {
+            createSemester(type: .firstHalf, name: "2025年度前期")
+        }
+        if !hasSemester(of: .secondHalf) {
+            createSemester(type: .secondHalf, name: "2025年度後期")
+        }
+        
+        loadAllSemesters()
+    }
+    
+    // すべての学期を読み込む
+    private func loadAllSemesters() {
+        let request: NSFetchRequest<Semester> = Semester.fetchRequest()
+        request.sortDescriptors = [NSSortDescriptor(keyPath: \Semester.createdAt, ascending: true)]
+        
+        do {
+            availableSemesters = try context.fetch(request)
+        } catch {
+            errorMessage = "学期データの読み込みに失敗しました: \(error.localizedDescription)"
+        }
+    }
+    
+    // 特定タイプの学期が存在するか確認
+    private func hasSemester(of type: SemesterType) -> Bool {
+        availableSemesters.contains { semester in
+            semester.semesterType == type.rawValue
+        }
+    }
+    
+    // 学期を作成
+    private func createSemester(type: SemesterType, name: String) {
+        let semester = Semester(context: context)
+        semester.semesterId = UUID()
+        semester.name = name
+        semester.semesterType = type.rawValue
+        semester.isActive = (type == .firstHalf) // デフォルトは前期をアクティブに
+        semester.createdAt = Date()
+        
+        let calendar = Calendar.current
+        let year = calendar.component(.year, from: Date())
+        
+        switch type {
+        case .firstHalf:
+            semester.startDate = calendar.date(from: DateComponents(year: year, month: 4, day: 1)) ?? Date()
+            semester.endDate = calendar.date(from: DateComponents(year: year, month: 9, day: 30)) ?? Date()
+        case .secondHalf:
+            semester.startDate = calendar.date(from: DateComponents(year: year, month: 10, day: 1)) ?? Date()
+            semester.endDate = calendar.date(from: DateComponents(year: year + 1, month: 3, day: 31)) ?? Date()
+        }
+        
+        saveContext()
+    }
+    
+    // 特定タイプの学期を読み込む
+    private func loadSemesterByType(_ type: SemesterType) {
+        let request: NSFetchRequest<Semester> = Semester.fetchRequest()
+        request.predicate = NSPredicate(format: "semesterType == %@", type.rawValue)
+        request.fetchLimit = 1
+        
+        do {
+            let semesters = try context.fetch(request)
+            if let semester = semesters.first {
+                // 古いアクティブ学期を非アクティブに
+                availableSemesters.forEach { $0.isActive = false }
+                
+                // 新しい学期をアクティブに
+                semester.isActive = true
+                currentSemester = semester
+                saveContext()
+            }
+        } catch {
+            errorMessage = "学期データの読み込みに失敗しました: \(error.localizedDescription)"
+        }
     }
     
     // MARK: - Private Methods

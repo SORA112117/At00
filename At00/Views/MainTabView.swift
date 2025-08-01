@@ -19,19 +19,26 @@ struct MainTabView: View {
                 }
                 .tag(0)
             
-            StatisticsView()
+            RiskManagementView()
+                .tabItem {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                    Text("危険度")
+                }
+                .tag(1)
+            
+            EnhancedStatisticsView()
                 .tabItem {
                     Image(systemName: "chart.bar.fill")
                     Text("統計")
                 }
-                .tag(1)
+                .tag(2)
             
             SettingsView()
                 .tabItem {
                     Image(systemName: "gearshape.fill")
                     Text("設定")
                 }
-                .tag(2)
+                .tag(3)
         }
         .accentColor(.blue)
     }
