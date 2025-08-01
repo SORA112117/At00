@@ -182,7 +182,8 @@ extension View {
 // MARK: - Color Utilities
 extension DesignSystem {
     static func getColor(for index: Int) -> Color {
-        return colorPalette[safe: index] ?? .blue
+        guard index >= 0 && index < colorPalette.count else { return .blue }
+        return colorPalette[index]
     }
     
     static func getColorIndex(for color: Color) -> Int {
@@ -191,8 +192,4 @@ extension DesignSystem {
 }
 
 // MARK: - Array Extension for Safe Access
-extension Array {
-    subscript(safe index: Index) -> Element? {
-        return indices.contains(index) ? self[index] : nil
-    }
-}
+// Note: iOS 18.5+ provides native safe subscript, so custom implementation is removed
