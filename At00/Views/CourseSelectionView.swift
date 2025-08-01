@@ -302,7 +302,17 @@ struct NewCourseCreationView: View {
                     .foregroundColor(.secondary)
             }
             
-            Section {
+        }
+        .navigationTitle("新規授業作成")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .navigationBarLeading) {
+                Button("キャンセル") {
+                    dismiss()
+                }
+            }
+            
+            ToolbarItem(placement: .navigationBarTrailing) {
                 Button("作成") {
                     viewModel.addCourse(
                         name: courseName,
@@ -315,11 +325,7 @@ struct NewCourseCreationView: View {
                     dismiss()
                 }
                 .disabled(courseName.isEmpty)
-                .frame(maxWidth: .infinity)
-                .foregroundColor(.white)
-                .padding()
-                .background(courseName.isEmpty ? Color.gray : Color.blue)
-                .cornerRadius(8)
+                .fontWeight(.semibold)
             }
         }
     }

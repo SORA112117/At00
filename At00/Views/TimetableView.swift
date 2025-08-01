@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import CoreData
 
 struct TimetableView: View {
     @StateObject private var viewModel = AttendanceViewModel()
@@ -19,7 +20,7 @@ struct TimetableView: View {
     
     private let dayNames = ["月", "火", "水", "木", "金"]
     private let periods = ["1限", "2限", "3限", "4限", "5限"]
-    private let timeSlots = ["9:00-10:30", "10:40-12:10", "13:00-14:30", "14:40-16:10", "16:20-17:50"]
+    @State private var timeSlots = ["9:00-10:30", "10:40-12:10", "13:00-14:30", "14:40-16:10", "16:20-17:50"]
     
     var body: some View {
         NavigationView {
@@ -97,6 +98,9 @@ struct TimetableView: View {
                     EditCourseDetailView(course: course, viewModel: viewModel)
                 }
             }
+        }
+        .onAppear {
+            loadTimeSlots()
         }
     }
     
@@ -237,6 +241,27 @@ struct TimetableView: View {
     private func showFeedbackAnimation(for course: Course) {
         // 簡単な視覚的フィードバック実装
         // 実際の実装では、より洗練されたアニメーションを追加できます
+    }
+    
+    private func loadTimeSlots() {
+        guard let semester = viewModel.currentSemester else { return }
+        
+        let request: NSFetchRequest<PeriodTime> = PeriodTime.fetchRequest()
+        request.predicate = NSPredicate(format: "semesterId == %@", semester.semesterId! as CVarArg)
+        request.sortDescriptors = [NSSortDescriptor(keyPath: \PeriodTime.period, ascending: true)]
+        
+        let periodTimes = (try? viewModel.managedObjectContext.fetch(request)) ?? []
+        
+        if !periodTimes.isEmpty {
+            let formatter = DateFormatter()
+            formatter.dateFormat = "HH:mm"
+            
+            timeSlots = periodTimes.map { periodTime in
+                let startText = formatter.string(from: periodTime.startTime ?? Date())
+                let endText = formatter.string(from: periodTime.endTime ?? Date())
+                return "\(startText)-\(endText)"
+            }
+        }
     }
 }
 

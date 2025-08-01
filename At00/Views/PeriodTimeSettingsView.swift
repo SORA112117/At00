@@ -12,6 +12,7 @@ struct PeriodTimeSettingsView: View {
     @StateObject private var viewModel = AttendanceViewModel()
     @State private var periodTimes: [PeriodTimeData] = []
     @State private var hasChanges = false
+    @Environment(\.dismiss) private var dismiss
     
     struct PeriodTimeData: Identifiable {
         let id = UUID()
@@ -45,11 +46,19 @@ struct PeriodTimeSettingsView: View {
             .navigationTitle("時限時間設定")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("キャンセル") {
+                        dismiss()
+                    }
+                }
+                
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button("保存") {
                         savePeriodTimes()
+                        dismiss()
                     }
                     .disabled(!hasChanges)
+                    .fontWeight(.semibold)
                 }
             }
             .onAppear {
