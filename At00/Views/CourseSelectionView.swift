@@ -14,12 +14,12 @@ struct CourseSelectionView: View {
     @ObservedObject var viewModel: AttendanceViewModel
     @Environment(\.dismiss) private var dismiss
     
-    @State private var selectedTab: CourseSelectionTab = .existing
+    @State private var selectedTab: CourseSelectionTab = .new
     @State private var availableExistingCourses: [Course] = []
     
     enum CourseSelectionTab: String, CaseIterable {
-        case existing = "既存授業"
         case new = "新規作成"
+        case existing = "既存授業"
         
         var displayName: String { rawValue }
     }
@@ -39,24 +39,25 @@ struct CourseSelectionView: View {
                 .padding()
                 
                 // コンテンツ
-                Group {
-                    if selectedTab == .existing {
+                ZStack {
+                    if selectedTab == .new {
+                        NewCourseCreationView(
+                            dayOfWeek: dayOfWeek,
+                            period: period,
+                            viewModel: viewModel
+                        )
+                        .transition(.asymmetric(insertion: .move(edge: .leading), removal: .move(edge: .trailing)))
+                    } else {
                         ExistingCourseSelectionView(
                             dayOfWeek: dayOfWeek,
                             period: period,
                             viewModel: viewModel,
                             availableCourses: availableExistingCourses
                         )
-                        .transition(.asymmetric(insertion: .move(edge: .leading), removal: .move(edge: .trailing)))
-                    } else {
-                        NewCourseCreationView(
-                            dayOfWeek: dayOfWeek,
-                            period: period,
-                            viewModel: viewModel
-                        )
                         .transition(.asymmetric(insertion: .move(edge: .trailing), removal: .move(edge: .leading)))
                     }
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
             .navigationTitle("授業選択")
             .navigationBarTitleDisplayMode(.inline)
@@ -227,7 +228,13 @@ struct ExistingCourseCard: View {
             newDayOfWeek: dayOfWeek,
             newPeriod: period
         )
-        onSelection()
+        
+        // 即座に時間割を再読み込み
+        viewModel.loadTimetable()
+        
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            onSelection()
+        }
     }
 }
 
@@ -247,61 +254,137 @@ struct NewCourseCreationView: View {
     private let dayNames = ["", "月", "火", "水", "木", "金", "土", "日"]
     
     var body: some View {
-        Form {
-            Section("授業情報") {
-                TextField("授業名", text: $courseName)
-                
-                HStack {
-                    Text("曜日・時限")
-                    Spacer()
-                    Text("\(dayNames[dayOfWeek])曜日 \(period)限")
-                        .foregroundColor(.secondary)
-                }
-            }
-            
-            Section("授業設定") {
-                Stepper("総授業回数: \(totalClasses)回", value: $totalClasses, in: 1...30)
-                
-                Stepper("最大欠席可能: \(maxAbsences)回", value: $maxAbsences, in: 1...15)
-                    .onChange(of: totalClasses) { _, newValue in
-                        maxAbsences = max(1, newValue / 3)
+        ScrollView {
+            VStack(spacing: 24) {
+                // ヘッダー情報
+                VStack(spacing: 16) {
+                    HStack {
+                        Image(systemName: "plus.circle.fill")
+                            .font(.system(size: 40))
+                            .foregroundColor(.primary)
+                        
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("新規授業")
+                                .font(.title2)
+                                .fontWeight(.bold)
+                            
+                            Text("\(dayNames[dayOfWeek])曜日 \(period)限")
+                                .font(.subheadline)
+                                .foregroundColor(.secondary)
+                        }
+                        
+                        Spacer()
                     }
+                }
+                .padding()
+                .background(
+                    RoundedRectangle(cornerRadius: 16)
+                        .fill(Color(.systemGray6))
+                )
                 
-                Toggle("通年科目", isOn: $isFullYear)
-                    .onChange(of: isFullYear) { _, newValue in
-                        if newValue {
-                            totalClasses = 30
-                            maxAbsences = 10
-                        } else {
-                            totalClasses = 15
-                            maxAbsences = 5
+                // 授業情報
+                VStack(alignment: .leading, spacing: 16) {
+                    Text("授業情報")
+                        .font(.headline)
+                        .fontWeight(.semibold)
+                    
+                    TextField("授業名を入力", text: $courseName)
+                        .textFieldStyle(RoundedBorderTextFieldStyle())
+                        .font(.body)
+                }
+                .padding()
+                .background(
+                    RoundedRectangle(cornerRadius: 16)
+                        .fill(Color(.systemBackground))
+                        .shadow(color: .black.opacity(0.05), radius: 4, x: 0, y: 2)
+                )
+                
+                // 授業設定
+                VStack(alignment: .leading, spacing: 16) {
+                    Text("授業設定")
+                        .font(.headline)
+                        .fontWeight(.semibold)
+                    
+                    VStack(spacing: 12) {
+                        HStack {
+                            Text("総授業回数")
+                            Spacer()
+                            Stepper("\(totalClasses)回", value: $totalClasses, in: 1...30)
+                        }
+                        
+                        Divider()
+                        
+                        HStack {
+                            Text("最大欠席可能")
+                            Spacer()
+                            Stepper("\(maxAbsences)回", value: $maxAbsences, in: 1...15)
+                        }
+                        
+                        Divider()
+                        
+                        HStack {
+                            Text("通年科目")
+                            Spacer()
+                            Toggle("", isOn: $isFullYear)
                         }
                     }
-                
-                HStack {
-                    Text("カラー")
-                    Spacer()
-                    ForEach(0..<8, id: \.self) { index in
-                        Circle()
-                            .fill(DesignSystem.getColor(for: index))
-                            .frame(width: 30, height: 30)
-                            .overlay(
-                                Circle()
-                                    .stroke(Color.primary, lineWidth: selectedColorIndex == index ? 3 : 0)
-                            )
-                            .onTapGesture {
-                                selectedColorIndex = index
-                            }
+                }
+                .padding()
+                .background(
+                    RoundedRectangle(cornerRadius: 16)
+                        .fill(Color(.systemBackground))
+                        .shadow(color: .black.opacity(0.05), radius: 4, x: 0, y: 2)
+                )
+                .onChange(of: totalClasses) { _, newValue in
+                    maxAbsences = max(1, newValue / 3)
+                }
+                .onChange(of: isFullYear) { _, newValue in
+                    if newValue {
+                        totalClasses = 30
+                        maxAbsences = 10
+                    } else {
+                        totalClasses = 15
+                        maxAbsences = 5
                     }
                 }
-            }
-            
-            Section {
+                
+                // カラー選択
+                VStack(alignment: .leading, spacing: 16) {
+                    Text("カラー")
+                        .font(.headline)
+                        .fontWeight(.semibold)
+                    
+                    LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 8), spacing: 12) {
+                        ForEach(0..<8, id: \.self) { index in
+                            Circle()
+                                .fill(DesignSystem.getColor(for: index))
+                                .frame(width: 32, height: 32)
+                                .overlay(
+                                    Circle()
+                                        .stroke(Color.primary, lineWidth: selectedColorIndex == index ? 3 : 0)
+                                )
+                                .onTapGesture {
+                                    withAnimation(.spring()) {
+                                        selectedColorIndex = index
+                                    }
+                                }
+                        }
+                    }
+                }
+                .padding()
+                .background(
+                    RoundedRectangle(cornerRadius: 16)
+                        .fill(Color(.systemBackground))
+                        .shadow(color: .black.opacity(0.05), radius: 4, x: 0, y: 2)
+                )
+                
+                // ヒント
                 Text("※ 欠席可能回数は総授業回数の1/3が目安です")
                     .font(.caption)
                     .foregroundColor(.secondary)
+                    .padding(.horizontal)
             }
-            
+            .padding()
         }
         .navigationTitle("新規授業作成")
         .navigationBarTitleDisplayMode(.inline)
@@ -313,7 +396,7 @@ struct NewCourseCreationView: View {
             }
             
             ToolbarItem(placement: .navigationBarTrailing) {
-                Button("作成") {
+                Button("保存") {
                     viewModel.addCourse(
                         name: courseName,
                         dayOfWeek: dayOfWeek,
@@ -322,7 +405,13 @@ struct NewCourseCreationView: View {
                         isFullYear: isFullYear,
                         colorIndex: selectedColorIndex
                     )
-                    dismiss()
+                    
+                    // 即座に時間割を再読み込み
+                    viewModel.loadTimetable()
+                    
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                        dismiss()
+                    }
                 }
                 .disabled(courseName.isEmpty)
                 .fontWeight(.semibold)
