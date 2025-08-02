@@ -243,32 +243,39 @@ struct TimetableView: View {
         // ワンタップで欠席記録
         withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
             viewModel.recordAbsence(for: course)
-        }
-        
-        // スマートなハプティックフィードバック
-        let remainingAbsences = viewModel.getRemainingAbsences(for: course)
-        
-        if remainingAbsences <= 0 {
-            // 危険な状況：強いバイブレーション
-            let notificationFeedback = UINotificationFeedbackGenerator()
-            notificationFeedback.notificationOccurred(.error)
-        } else if remainingAbsences <= 2 {
-            // 警告：中程度のバイブレーション
-            let notificationFeedback = UINotificationFeedbackGenerator()
-            notificationFeedback.notificationOccurred(.warning)
-        } else {
-            // 通常：軽いバイブレーション
-            let impactFeedback = UIImpactFeedbackGenerator(style: .light)
-            impactFeedback.impactOccurred()
+            // 即座にUIを更新
+            viewModel.objectWillChange.send()
         }
         
         // 視覚的フィードバック（パーティクルエフェクトのようなアニメーション）
         showFeedbackAnimation(for: course)
+        
+        // スマートなハプティックフィードバック（欠席記録後の新しい状態で判定）
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            let remainingAbsences = viewModel.getRemainingAbsences(for: course)
+            
+            if remainingAbsences <= 0 {
+                // 危険な状況：強いバイブレーション
+                let notificationFeedback = UINotificationFeedbackGenerator()
+                notificationFeedback.notificationOccurred(.error)
+            } else if remainingAbsences <= 2 {
+                // 警告：中程度のバイブレーション
+                let notificationFeedback = UINotificationFeedbackGenerator()
+                notificationFeedback.notificationOccurred(.warning)
+            } else {
+                // 通常：軽いバイブレーション
+                let impactFeedback = UIImpactFeedbackGenerator(style: .light)
+                impactFeedback.impactOccurred()
+            }
+        }
     }
     
     private func showFeedbackAnimation(for course: Course) {
-        // 簡単な視覚的フィードバック実装
-        // 実際の実装では、より洗練されたアニメーションを追加できます
+        // パルスエフェクト用のState変数を使用
+        // この処理は既にEnhancedCourseCellで実装されているshowingCountAnimationで対応
+        withAnimation(.spring(response: 0.2, dampingFraction: 0.6)) {
+            // アニメーション処理はEnhancedCourseCellで実装済み
+        }
     }
     
     private func loadTimeSlots() {
@@ -321,24 +328,23 @@ struct EnhancedCourseCell: View {
     
     var body: some View {
         Button(action: onTap) {
-            VStack(spacing: 2) {
+            VStack(spacing: 0) {
                 if let course = course {
-                    // 上部：科目名
+                    // 上部：科目名（10文字まで2行表示）
                     Text(course.courseName ?? "")
-                        .font(.system(size: 10, weight: .medium))
+                        .font(.system(size: 9, weight: .medium))
                         .multilineTextAlignment(.center)
                         .lineLimit(2)
                         .foregroundColor(.primary)
                         .frame(maxWidth: .infinity)
-                        .frame(height: 26)
-                    
-                    Spacer()
+                        .frame(height: 24)
+                        .padding(.horizontal, 2)
                     
                     // 中央：欠席数（大きなフォント）
                     ZStack {
                         Text("\(absenceCount)")
-                            .font(.system(size: 28, weight: .bold))
-                            .foregroundColor(statusColor)
+                            .font(.system(size: 22, weight: .bold))
+                            .foregroundColor(.primary)
                             .scaleEffect(showingCountAnimation ? 1.2 : 1.0)
                             .animation(.spring(response: 0.3, dampingFraction: 0.6), value: absenceCount)
                             .animation(.spring(response: 0.2, dampingFraction: 0.8), value: showingCountAnimation)
@@ -361,25 +367,23 @@ struct EnhancedCourseCell: View {
                         // カウントアップエフェクト
                         if showingCountAnimation {
                             Text("+1")
-                                .font(.system(size: 16, weight: .bold))
-                                .foregroundColor(statusColor)
-                                .offset(y: -20)
+                                .font(.system(size: 14, weight: .bold))
+                                .foregroundColor(.red)
+                                .offset(y: -15)
                                 .opacity(showingCountAnimation ? 0 : 1)
                                 .animation(.easeOut(duration: 0.5), value: showingCountAnimation)
                         }
                     }
+                    .frame(height: 32)
                     
-                    Spacer()
+                    // 下部：カラーボックス（数字の下に配置）
+                    Spacer(minLength: 4) // カラーボックスの位置を少し下に
                     
-                    // 下部：カラーボックス（小さいグリッド表示）
-                    HStack(spacing: 1) {
-                        ForEach(0..<min(10, Int(course.maxAbsences)), id: \.self) { index in
-                            Rectangle()
-                                .fill(index < absenceCount ? .red : .gray.opacity(0.3))
-                                .frame(width: 4, height: 4)
-                        }
-                    }
-                    .frame(height: 6)
+                    createColorBoxGrid(course: course, absenceCount: absenceCount, cellWidth: cellWidth)
+                        .frame(height: course.isFullYear ? 16 : 8) // 正方形用に高さ調整
+                        .padding(.horizontal, 2)
+                    
+                    Spacer(minLength: 2)
                 } else {
                     Text("+")
                         .font(.system(size: 20, weight: .ultraLight))
@@ -390,6 +394,8 @@ struct EnhancedCourseCell: View {
             .background(
                 RoundedRectangle(cornerRadius: 8)
                     .fill(course != nil ? Color(.systemBackground) : Color(.systemGray6))
+                    .scaleEffect(isPressed ? 0.95 : 1.0)
+                    .animation(.easeInOut(duration: 0.1), value: isPressed)
                     .overlay(
                         // 左辺全体にカラーライン
                         HStack {
@@ -409,6 +415,12 @@ struct EnhancedCourseCell: View {
                             Spacer()
                         }
                     )
+                    .overlay(
+                        // タップ時のオーバーレイエフェクト
+                        RoundedRectangle(cornerRadius: 8)
+                            .fill(Color.black.opacity(isPressed ? 0.1 : 0))
+                            .animation(.easeInOut(duration: 0.1), value: isPressed)
+                    )
             )
         }
         .buttonStyle(PlainButtonStyle())
@@ -418,8 +430,8 @@ struct EnhancedCourseCell: View {
                 onLongPress()
             }
         }
-        .scaleEffect(isPressed ? 0.98  : 1.0)
         .onTapGesture {
+            // タップエフェクト
             withAnimation(.easeInOut(duration: 0.1)) {
                 isPressed = true
             }
@@ -436,6 +448,60 @@ struct EnhancedCourseCell: View {
     
     private func getCourseColor(_ course: Course) -> Color {
         return DesignSystem.getColor(for: Int(course.colorIndex))
+    }
+    
+    private func createColorBoxGrid(course: Course, absenceCount: Int, cellWidth: CGFloat) -> some View {
+        let maxAbsences = Int(course.maxAbsences)
+        let boxSize: CGFloat = max(4, (cellWidth - 16) / (course.isFullYear ? 5 : 8)) // 最小サイズを4に増加
+        
+        return Group {
+            if course.isFullYear {
+                // 通年：2行5列（正方形）
+                VStack(spacing: 1) {
+                    HStack(spacing: 1) {
+                        ForEach(0..<5, id: \.self) { index in
+                            Rectangle()
+                                .fill(getColorBoxColor(course: course, index: index, absenceCount: absenceCount))
+                                .frame(width: boxSize, height: boxSize) // 完全な正方形
+                        }
+                    }
+                    HStack(spacing: 1) {
+                        ForEach(5..<min(10, maxAbsences), id: \.self) { index in
+                            Rectangle()
+                                .fill(getColorBoxColor(course: course, index: index, absenceCount: absenceCount))
+                                .frame(width: boxSize, height: boxSize) // 完全な正方形
+                        }
+                    }
+                }
+            } else {
+                // 通常：1行（正方形）
+                HStack(spacing: 1) {
+                    ForEach(0..<min(8, maxAbsences), id: \.self) { index in
+                        Rectangle()
+                            .fill(getColorBoxColor(course: course, index: index, absenceCount: absenceCount))
+                            .frame(width: boxSize, height: boxSize) // 完全な正方形
+                    }
+                }
+            }
+        }
+    }
+    
+    private func getColorBoxColor(course: Course, index: Int, absenceCount: Int) -> Color {
+        let maxAbsences = Int(course.maxAbsences)
+        
+        if index < absenceCount {
+            // 欠席した回数分
+            if absenceCount >= maxAbsences {
+                return .red // 限界到達：赤
+            } else if absenceCount == maxAbsences - 1 {
+                return .orange // 危険圏：オレンジ
+            } else {
+                return .yellow.opacity(0.8) // 安全圏だが欠席済み：薄い黄色
+            }
+        } else {
+            // まだ欠席していない部分：白色薄透明
+            return Color.white.opacity(0.4)
+        }
     }
 }
 

@@ -81,32 +81,61 @@ class AttendanceViewModel: ObservableObject {
         }
     }
     
-    // 欠席を記録
+    // 欠席を記録（同一名授業にも同期）
     func recordAbsence(for course: Course, type: AttendanceType = .absent, memo: String = "") {
-        let record = AttendanceRecord(context: context)
-        record.recordId = UUID()
-        record.course = course
-        record.date = Date()
-        record.type = type.rawValue
-        record.memo = memo
-        record.createdAt = Date()
+        guard let courseName = course.courseName, 
+              let semester = course.semester else { return }
         
-        saveContext()
-    }
-    
-    // 最後の記録を取り消し
-    func undoLastRecord(for course: Course) {
-        let request: NSFetchRequest<AttendanceRecord> = AttendanceRecord.fetchRequest()
-        request.predicate = NSPredicate(format: "course == %@", course)
-        request.sortDescriptors = [NSSortDescriptor(keyPath: \AttendanceRecord.createdAt, ascending: false)]
-        request.fetchLimit = 1
+        // 同一名の全ての授業を取得
+        let request: NSFetchRequest<Course> = Course.fetchRequest()
+        request.predicate = NSPredicate(format: "courseName == %@ AND semester == %@", courseName, semester)
         
         do {
-            let records = try context.fetch(request)
-            if let lastRecord = records.first {
-                context.delete(lastRecord)
-                saveContext()
+            let sameCourses = try context.fetch(request)
+            
+            // 同一名の全ての授業に欠席記録を追加
+            for sameCourse in sameCourses {
+                let record = AttendanceRecord(context: context)
+                record.recordId = UUID()
+                record.course = sameCourse
+                record.date = Date()
+                record.type = type.rawValue
+                record.memo = memo
+                record.createdAt = Date()
             }
+            
+            saveContext()
+        } catch {
+            errorMessage = "欠席記録の保存に失敗しました: \(error.localizedDescription)"
+        }
+    }
+    
+    // 最後の記録を取り消し（同一名授業からも同期）
+    func undoLastRecord(for course: Course) {
+        guard let courseName = course.courseName,
+              let semester = course.semester else { return }
+        
+        // 同一名の全ての授業を取得
+        let courseRequest: NSFetchRequest<Course> = Course.fetchRequest()
+        courseRequest.predicate = NSPredicate(format: "courseName == %@ AND semester == %@", courseName, semester)
+        
+        do {
+            let sameCourses = try context.fetch(courseRequest)
+            
+            // 同一名授業の最新記録を取得して削除
+            for sameCourse in sameCourses {
+                let request: NSFetchRequest<AttendanceRecord> = AttendanceRecord.fetchRequest()
+                request.predicate = NSPredicate(format: "course == %@", sameCourse)
+                request.sortDescriptors = [NSSortDescriptor(keyPath: \AttendanceRecord.createdAt, ascending: false)]
+                request.fetchLimit = 1
+                
+                let records = try context.fetch(request)
+                if let lastRecord = records.first {
+                    context.delete(lastRecord)
+                }
+            }
+            
+            saveContext()
         } catch {
             errorMessage = "記録の取り消しに失敗しました: \(error.localizedDescription)"
         }
@@ -150,6 +179,9 @@ class AttendanceViewModel: ObservableObject {
     func addCourse(name: String, dayOfWeek: Int, period: Int, totalClasses: Int = 15, isFullYear: Bool = false, colorIndex: Int = 0) {
         guard let semester = currentSemester else { return }
         
+        // 同名の既存授業を確認して欠席記録を取得
+        let existingRecords = getExistingAbsenceRecords(for: name, in: semester)
+        
         let course = Course(context: context)
         course.courseId = UUID()
         course.courseName = name
@@ -161,6 +193,17 @@ class AttendanceViewModel: ObservableObject {
         course.isNotificationEnabled = true
         course.isFullYear = isFullYear
         course.colorIndex = Int16(colorIndex)
+        
+        // 既存の欠席記録を新しい授業にも適用
+        for record in existingRecords {
+            let newRecord = AttendanceRecord(context: context)
+            newRecord.recordId = UUID()
+            newRecord.course = course
+            newRecord.date = record.date
+            newRecord.type = record.type
+            newRecord.memo = record.memo
+            newRecord.createdAt = record.createdAt
+        }
         
         // 通年科目の場合、もう一方の学期にも同じ授業を追加
         if isFullYear {
@@ -184,9 +227,33 @@ class AttendanceViewModel: ObservableObject {
         loadTimetable()
     }
     
+    // 同名授業の既存欠席記録を取得
+    private func getExistingAbsenceRecords(for courseName: String, in semester: Semester) -> [AttendanceRecord] {
+        let courseRequest: NSFetchRequest<Course> = Course.fetchRequest()
+        courseRequest.predicate = NSPredicate(format: "courseName == %@ AND semester == %@", courseName, semester)
+        courseRequest.fetchLimit = 1
+        
+        do {
+            let courses = try context.fetch(courseRequest)
+            guard let existingCourse = courses.first else { return [] }
+            
+            let recordRequest: NSFetchRequest<AttendanceRecord> = AttendanceRecord.fetchRequest()
+            recordRequest.predicate = NSPredicate(format: "course == %@", existingCourse)
+            recordRequest.sortDescriptors = [NSSortDescriptor(keyPath: \AttendanceRecord.createdAt, ascending: true)]
+            
+            return try context.fetch(recordRequest)
+        } catch {
+            return []
+        }
+    }
+    
     // 既存授業を新しい時間割位置に配置
     func assignExistingCourse(course: Course, newDayOfWeek: Int, newPeriod: Int) {
-        guard let semester = currentSemester else { return }
+        guard let semester = currentSemester,
+              let courseName = course.courseName else { return }
+        
+        // 同名の既存授業の欠席記録を取得
+        let existingRecords = getExistingAbsenceRecords(for: courseName, in: semester)
         
         // 既存の授業の複製を作成
         let newCourse = Course(context: context)
@@ -200,6 +267,17 @@ class AttendanceViewModel: ObservableObject {
         newCourse.isNotificationEnabled = course.isNotificationEnabled
         newCourse.isFullYear = course.isFullYear
         newCourse.colorIndex = course.colorIndex
+        
+        // 既存の欠席記録を新しい授業にも適用
+        for record in existingRecords {
+            let newRecord = AttendanceRecord(context: context)
+            newRecord.recordId = UUID()
+            newRecord.course = newCourse
+            newRecord.date = record.date
+            newRecord.type = record.type
+            newRecord.memo = record.memo
+            newRecord.createdAt = record.createdAt
+        }
         
         // 通年科目の場合、もう一方の学期にも配置
         if course.isFullYear {
@@ -243,7 +321,7 @@ class AttendanceViewModel: ObservableObject {
     }
     
     // 学期の初期設定
-    private func setupSemesters() {
+    func setupSemesters() {
         loadAllSemesters()
         
         // 前期・後期の学期がなければ作成

@@ -127,8 +127,39 @@ struct SettingsView: View {
     }
     
     private func deleteAllData() {
-        // Core Dataのすべてのデータを削除する処理
-        // 実装時には適切なエラーハンドリングを追加
+        let context = viewModel.managedObjectContext
+        
+        // すべてのエンティティを削除
+        deleteAllEntities(of: AttendanceRecord.self, in: context)
+        deleteAllEntities(of: Course.self, in: context)
+        deleteAllEntities(of: Semester.self, in: context)
+        deleteAllEntities(of: PeriodTime.self, in: context)
+        
+        // 変更を保存
+        do {
+            try context.save()
+            
+            // ViewModelを再初期化して学期を再作成
+            viewModel.setupSemesters()
+            viewModel.loadCurrentSemester()
+            viewModel.loadTimetable()
+            
+        } catch {
+            print("データ削除エラー: \(error)")
+        }
+    }
+    
+    private func deleteAllEntities<T: NSManagedObject>(of entityType: T.Type, in context: NSManagedObjectContext) {
+        let fetchRequest = NSFetchRequest<T>(entityName: String(describing: entityType))
+        
+        do {
+            let entities = try context.fetch(fetchRequest)
+            for entity in entities {
+                context.delete(entity)
+            }
+        } catch {
+            print("\(entityType)の削除エラー: \(error)")
+        }
     }
 }
 
