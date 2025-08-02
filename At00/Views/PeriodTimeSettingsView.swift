@@ -136,64 +136,40 @@ struct PeriodTimeSettingsView: View {
 struct PeriodTimeRow: View {
     @Binding var periodData: PeriodTimeSettingsView.PeriodTimeData
     let onTimeChanged: () -> Void
+    @State private var showingTimePicker = false
     
     var body: some View {
-        VStack(spacing: 12) {
+        Button {
+            showingTimePicker = true
+        } label: {
             HStack {
-                Text("\(periodData.period)限")
-                    .font(.headline)
-                    .foregroundColor(.primary)
-                Spacer()
-                Text(timeRangeText)
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
-            }
-            
-            HStack(spacing: 16) {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("開始時刻")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
+                    Text("\(periodData.period)限")
+                        .font(.headline)
+                        .foregroundColor(.primary)
                     
-                    DatePicker(
-                        "",
-                        selection: Binding(
-                            get: { periodData.startTime },
-                            set: { newValue in
-                                periodData.startTime = newValue
-                                onTimeChanged()
-                            }
-                        ),
-                        displayedComponents: .hourAndMinute
-                    )
-                    .datePickerStyle(.wheel)
-                    .labelsHidden()
-                    .frame(height: 80)
+                    Text(timeRangeText)
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
                 }
                 
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("終了時刻")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                    
-                    DatePicker(
-                        "",
-                        selection: Binding(
-                            get: { periodData.endTime },
-                            set: { newValue in
-                                periodData.endTime = newValue
-                                onTimeChanged()
-                            }
-                        ),
-                        displayedComponents: .hourAndMinute
-                    )
-                    .datePickerStyle(.wheel)
-                    .labelsHidden()
-                    .frame(height: 80)
-                }
+                Spacer()
+                
+                Image(systemName: "clock")
+                    .foregroundColor(.blue)
+                    .font(.title2)
             }
+            .padding()
+            .background(Color(.systemGray6))
+            .cornerRadius(12)
         }
-        .padding(.vertical, 8)
+        .buttonStyle(PlainButtonStyle())
+        .sheet(isPresented: $showingTimePicker) {
+            PeriodTimeEditView(
+                periodData: $periodData,
+                onTimeChanged: onTimeChanged
+            )
+        }
     }
     
     private var timeRangeText: String {
@@ -202,6 +178,137 @@ struct PeriodTimeRow: View {
         let startText = formatter.string(from: periodData.startTime)
         let endText = formatter.string(from: periodData.endTime)
         return "\(startText) - \(endText)"
+    }
+}
+
+struct PeriodTimeEditView: View {
+    @Binding var periodData: PeriodTimeSettingsView.PeriodTimeData
+    let onTimeChanged: () -> Void
+    @Environment(\.dismiss) private var dismiss
+    
+    @State private var tempStartTime: Date
+    @State private var tempEndTime: Date
+    
+    init(periodData: Binding<PeriodTimeSettingsView.PeriodTimeData>, onTimeChanged: @escaping () -> Void) {
+        self._periodData = periodData
+        self.onTimeChanged = onTimeChanged
+        self._tempStartTime = State(initialValue: periodData.wrappedValue.startTime)
+        self._tempEndTime = State(initialValue: periodData.wrappedValue.endTime)
+    }
+    
+    var body: some View {
+        NavigationView {
+            VStack(spacing: 24) {
+                // ヘッダー情報
+                VStack(spacing: 8) {
+                    Text("\(periodData.period)限")
+                        .font(.title)
+                        .fontWeight(.bold)
+                    
+                    Text("授業時間を設定してください")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                }
+                .padding(.top)
+                
+                // 時間設定
+                VStack(spacing: 32) {
+                    // 開始時刻
+                    VStack(spacing: 16) {
+                        HStack {
+                            Text("開始時刻")
+                                .font(.headline)
+                            Spacer()
+                            Text(formatTime(tempStartTime))
+                                .font(.title2)
+                                .fontWeight(.semibold)
+                                .foregroundColor(.blue)
+                        }
+                        
+                        DatePicker(
+                            "開始時刻",
+                            selection: $tempStartTime,
+                            displayedComponents: .hourAndMinute
+                        )
+                        .datePickerStyle(.wheel)
+                        .labelsHidden()
+                        .frame(height: 120)
+                    }
+                    .padding()
+                    .background(Color(.systemGray6))
+                    .cornerRadius(16)
+                    
+                    // 終了時刻
+                    VStack(spacing: 16) {
+                        HStack {
+                            Text("終了時刻")
+                                .font(.headline)
+                            Spacer()
+                            Text(formatTime(tempEndTime))
+                                .font(.title2)
+                                .fontWeight(.semibold)
+                                .foregroundColor(.blue)
+                        }
+                        
+                        DatePicker(
+                            "終了時刻",
+                            selection: $tempEndTime,
+                            displayedComponents: .hourAndMinute
+                        )
+                        .datePickerStyle(.wheel)
+                        .labelsHidden()
+                        .frame(height: 120)
+                    }
+                    .padding()
+                    .background(Color(.systemGray6))
+                    .cornerRadius(16)
+                }
+                
+                Spacer()
+                
+                // 時間範囲表示
+                HStack {
+                    Text("授業時間:")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                    
+                    Text("\(formatTime(tempStartTime)) - \(formatTime(tempEndTime))")
+                        .font(.headline)
+                        .foregroundColor(.primary)
+                }
+                .padding()
+                .background(Color(.systemBackground))
+                .cornerRadius(12)
+                .shadow(color: .black.opacity(0.05), radius: 4, x: 0, y: 2)
+            }
+            .padding()
+            .navigationTitle("時間設定")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("キャンセル") {
+                        dismiss()
+                    }
+                }
+                
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("保存") {
+                        periodData.startTime = tempStartTime
+                        periodData.endTime = tempEndTime
+                        onTimeChanged()
+                        dismiss()
+                    }
+                    .fontWeight(.semibold)
+                    .disabled(tempStartTime >= tempEndTime)
+                }
+            }
+        }
+    }
+    
+    private func formatTime(_ time: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "HH:mm"
+        return formatter.string(from: time)
     }
 }
 
