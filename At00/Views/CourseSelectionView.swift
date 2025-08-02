@@ -17,6 +17,7 @@ struct CourseSelectionView: View {
     @State private var selectedTab: CourseSelectionTab = .new
     @State private var availableExistingCourses: [Course] = []
     @State private var selectedExistingCourse: Course?
+    @State private var hasAppeared = false // 初回表示フラグ追加
     
     // 新規作成用のState
     @State private var newCourseName = ""
@@ -47,7 +48,7 @@ struct CourseSelectionView: View {
                 .padding()
                 
                 // コンテンツ
-                ZStack {
+                Group {
                     if selectedTab == .new {
                         NewCourseCreationView(
                             dayOfWeek: dayOfWeek,
@@ -99,10 +100,15 @@ struct CourseSelectionView: View {
                 }
             }
             .onAppear {
-                loadAvailableExistingCourses()
+                if !hasAppeared {
+                    loadAvailableExistingCourses()
+                    hasAppeared = true
+                }
             }
-            .animation(.easeInOut(duration: 0.3), value: selectedTab)
+            .background(Color(.systemGroupedBackground)) // 背景色を明示的に設定
+            .animation(hasAppeared ? .easeInOut(duration: 0.3) : nil, value: selectedTab)
         }
+        .navigationViewStyle(StackNavigationViewStyle()) // iPadでも一貫した表示
     }
     
     private func loadAvailableExistingCourses() {
