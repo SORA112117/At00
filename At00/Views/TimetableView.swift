@@ -17,6 +17,8 @@ struct TimetableView: View {
     @State private var showingErrorAlert = false
     @State private var showingPeriodTimeSettings = false
     @State private var showingCourseEditDetail = false
+    @State private var selectedPeriod: Int?
+    @State private var showingPeriodEdit = false
     
     private let dayNames = ["月", "火", "水", "木", "金"]
     private let periods = ["1限", "2限", "3限", "4限", "5限"]
@@ -104,6 +106,17 @@ struct TimetableView: View {
                     EditCourseDetailView(course: course, viewModel: viewModel)
                 }
             }
+            .sheet(isPresented: $showingPeriodEdit) {
+                if let period = selectedPeriod {
+                    SinglePeriodEditView(period: period, viewModel: viewModel)
+                }
+            }
+            .onChange(of: showingPeriodEdit) { _, isShowing in
+                if !isShowing {
+                    // 個別時限編集画面が閉じられたときも時間を再読み込み
+                    loadTimeSlots()
+                }
+            }
         }
         .onAppear {
             loadTimeSlots()
@@ -182,7 +195,8 @@ struct TimetableView: View {
     
     private func periodHeaderView(for periodIndex: Int, height: CGFloat) -> some View {
         Button {
-            showingPeriodTimeSettings = true
+            selectedPeriod = periodIndex + 1  // 1-based period number
+            showingPeriodEdit = true
         } label: {
             VStack(spacing: 2) {
                 Text(periods[periodIndex])
