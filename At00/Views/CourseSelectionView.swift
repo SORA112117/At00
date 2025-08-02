@@ -47,13 +47,26 @@ struct CourseSelectionView: View {
                 .pickerStyle(SegmentedPickerStyle())
                 .padding()
                 
-                // コンテンツ
-                ZStack {
-                    // 背景色を常に表示
-                    Color(.systemGroupedBackground)
-                        .ignoresSafeArea()
-                    
-                    if selectedTab == .new {
+                // ViewModelが初期化されているか確認
+                if viewModel.currentSemester == nil {
+                    // 初期化中の表示
+                    VStack {
+                        ProgressView()
+                            .scaleEffect(1.5)
+                            .padding()
+                        Text("読み込み中...")
+                            .foregroundColor(.secondary)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(Color(.systemGroupedBackground))
+                } else {
+                    // コンテンツ
+                    ZStack {
+                        // 背景色を常に表示
+                        Color(.systemGroupedBackground)
+                            .ignoresSafeArea()
+                        
+                        if selectedTab == .new {
                         NewCourseCreationView(
                             dayOfWeek: dayOfWeek,
                             period: period,
@@ -75,8 +88,9 @@ struct CourseSelectionView: View {
                         )
                         .transition(.asymmetric(insertion: .move(edge: .trailing), removal: .move(edge: .leading)))
                     }
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
             .navigationTitle("授業選択")
             .navigationBarTitleDisplayMode(.inline)
@@ -104,8 +118,14 @@ struct CourseSelectionView: View {
                 }
             }
             .onAppear {
-                // 毎回確実に実行
-                DispatchQueue.main.async {
+                // ViewModelの初期化を確実に待つ
+                if viewModel.currentSemester == nil {
+                    // currentSemesterがない場合は再読み込み
+                    viewModel.loadCurrentSemester()
+                }
+                
+                // 少し遅延を入れて確実に初期化
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                     loadAvailableExistingCourses()
                     if !hasAppeared {
                         hasAppeared = true
