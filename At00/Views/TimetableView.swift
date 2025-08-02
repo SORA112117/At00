@@ -497,7 +497,7 @@ struct EnhancedCourseCell: View {
             } else if absenceCount == maxAbsences - 1 {
                 return .orange // 危険圏：オレンジ
             } else {
-                return Color(red: 0, green: 1, blue: 0) // 安全圏：#00ff00
+                return Color(red: 0.4, green: 0.8, blue: 0.4) // 安全圏：目に優しいマットな緑
             }
         } else {
             // まだ欠席していない部分：白色薄透明

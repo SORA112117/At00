@@ -249,7 +249,18 @@ struct SimpleExistingCourseCard: View {
     let onSelection: () -> Void
     
     var body: some View {
-        Button(action: onSelection) {
+        ZStack {
+            // 背景とボーダー
+            RoundedRectangle(cornerRadius: 12)
+                .fill(isSelected ? Color.blue.opacity(0.15) : Color(.systemBackground))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12)
+                        .stroke(isSelected ? Color.blue : Color(.systemGray4), lineWidth: isSelected ? 2 : 1)
+                )
+                .scaleEffect(isSelected ? 1.02 : 1.0)
+                .animation(.easeInOut(duration: 0.2), value: isSelected)
+            
+            // カード内容
             HStack(spacing: 12) {
                 // カラーライン
                 Rectangle()
@@ -282,24 +293,14 @@ struct SimpleExistingCourseCard: View {
                 }
                 
                 Spacer()
-                
-                // 選択状態を示すスタイル（丸形ボタンは削除）
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
         }
-        .buttonStyle(PlainButtonStyle())
-        .contentShape(Rectangle()) // カード全体をタップ可能にする
-        .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(isSelected ? Color.blue.opacity(0.15) : Color(.systemBackground))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12)
-                        .stroke(isSelected ? Color.blue : Color(.systemGray4), lineWidth: isSelected ? 2 : 1)
-                )
-        )
-        .scaleEffect(isSelected ? 1.02 : 1.0)
-        .animation(.easeInOut(duration: 0.2), value: isSelected)
+        .contentShape(Rectangle()) // 確実にカード全体をタップ可能にする
+        .onTapGesture {
+            onSelection()
+        }
     }
     
     // ダミーの欠席数取得（簡略化）
