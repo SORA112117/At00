@@ -289,6 +289,7 @@ struct SimpleExistingCourseCard: View {
             .padding(.vertical, 12)
         }
         .buttonStyle(PlainButtonStyle())
+        .contentShape(Rectangle()) // カード全体をタップ可能にする
         .background(
             RoundedRectangle(cornerRadius: 12)
                 .fill(isSelected ? Color.blue.opacity(0.15) : Color(.systemBackground))

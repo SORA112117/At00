@@ -330,8 +330,8 @@ struct EnhancedCourseCell: View {
         Button(action: onTap) {
             VStack(spacing: 0) {
                 if let course = course {
-                    // 上部：科目名（10文字まで2行表示）
-                    Text(course.courseName ?? "")
+                    // 上部：科目名（6文字まで2行表示）
+                    Text(limitCourseName(course.courseName ?? ""))
                         .font(.system(size: 9, weight: .medium))
                         .multilineTextAlignment(.center)
                         .lineLimit(2)
@@ -452,7 +452,8 @@ struct EnhancedCourseCell: View {
     
     private func createColorBoxGrid(course: Course, absenceCount: Int, cellWidth: CGFloat) -> some View {
         let maxAbsences = Int(course.maxAbsences)
-        let boxSize: CGFloat = max(4, (cellWidth - 16) / (course.isFullYear ? 5 : 8)) // 最小サイズを4に増加
+        // カラーボックスサイズを統一（通年・通常関係なく同じサイズ）
+        let boxSize: CGFloat = max(4, (cellWidth - 16) / 8) // 8列基準で統一
         
         return Group {
             if course.isFullYear {
@@ -496,12 +497,20 @@ struct EnhancedCourseCell: View {
             } else if absenceCount == maxAbsences - 1 {
                 return .orange // 危険圏：オレンジ
             } else {
-                return .yellow.opacity(0.8) // 安全圏だが欠席済み：薄い黄色
+                return Color(red: 0, green: 1, blue: 0) // 安全圏：#00ff00
             }
         } else {
             // まだ欠席していない部分：白色薄透明
             return Color.white.opacity(0.4)
         }
+    }
+    
+    private func limitCourseName(_ name: String) -> String {
+        if name.count <= 6 {
+            return name
+        }
+        let index = name.index(name.startIndex, offsetBy: 6)
+        return String(name[..<index])
     }
 }
 
