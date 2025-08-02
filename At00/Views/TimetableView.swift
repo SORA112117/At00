@@ -72,13 +72,17 @@ struct TimetableView: View {
                     CourseDetailView(course: course, viewModel: viewModel)
                 }
             }
-            .sheet(isPresented: $showingAddCourse) {
+            .sheet(isPresented: $showingAddCourse, onDismiss: {
+                // シートが閉じられた時にタイムスロットをリセット
+                selectedTimeSlot = nil
+            }) {
                 if let timeSlot = selectedTimeSlot {
                     CourseSelectionView(
                         dayOfWeek: timeSlot.day,
                         period: timeSlot.period,
                         viewModel: viewModel
                     )
+                    .id("\(timeSlot.day)-\(timeSlot.period)") // 一意のIDで強制的に再生成
                 }
             }
             .alert("エラー", isPresented: $showingErrorAlert) {

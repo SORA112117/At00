@@ -48,7 +48,11 @@ struct CourseSelectionView: View {
                 .padding()
                 
                 // コンテンツ
-                Group {
+                ZStack {
+                    // 背景色を常に表示
+                    Color(.systemGroupedBackground)
+                        .ignoresSafeArea()
+                    
                     if selectedTab == .new {
                         NewCourseCreationView(
                             dayOfWeek: dayOfWeek,
@@ -100,15 +104,21 @@ struct CourseSelectionView: View {
                 }
             }
             .onAppear {
-                if !hasAppeared {
+                // 毎回確実に実行
+                DispatchQueue.main.async {
                     loadAvailableExistingCourses()
-                    hasAppeared = true
+                    if !hasAppeared {
+                        hasAppeared = true
+                    }
                 }
             }
             .background(Color(.systemGroupedBackground)) // 背景色を明示的に設定
             .animation(hasAppeared ? .easeInOut(duration: 0.3) : nil, value: selectedTab)
         }
         .navigationViewStyle(StackNavigationViewStyle()) // iPadでも一貫した表示
+        .onAppear {
+            print("CourseSelectionView appeared for day: \(dayOfWeek), period: \(period)")
+        }
     }
     
     private func loadAvailableExistingCourses() {
