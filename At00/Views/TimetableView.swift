@@ -60,22 +60,20 @@ struct TimetableView: View {
                     }
                 }
                 
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("設定") {
-                        // 設定画面を表示
-                    }
-                }
             }
             .sheet(isPresented: $showingAddCourse, onDismiss: {
                 // シートが閉じられた時にタイムスロットをリセット
                 selectedTimeSlot = nil
             }) {
                 if let timeSlot = selectedTimeSlot {
-                    CourseSelectionView(
-                        dayOfWeek: timeSlot.day,
-                        period: timeSlot.period,
-                        viewModel: viewModel
-                    )
+                    NavigationView {
+                        CourseSelectionView(
+                            dayOfWeek: timeSlot.day,
+                            period: timeSlot.period,
+                            viewModel: viewModel
+                        )
+                    }
+                    .navigationViewStyle(StackNavigationViewStyle())
                     .id("\(timeSlot.day)-\(timeSlot.period)") // 一意のIDで強制的に再生成
                 }
             }
@@ -101,7 +99,10 @@ struct TimetableView: View {
             }
             .sheet(isPresented: $showingCourseEditDetail) {
                 if let course = selectedCourse {
-                    EditCourseDetailView(course: course, viewModel: viewModel)
+                    NavigationView {
+                        EditCourseDetailView(course: course, viewModel: viewModel)
+                    }
+                    .navigationViewStyle(StackNavigationViewStyle())
                 }
             }
             .sheet(isPresented: $showingPeriodEdit) {
@@ -347,20 +348,23 @@ struct EnhancedCourseCell: View {
                         .scaleEffect(showingCountAnimation ? 1.1 : 1.0)
                         .animation(.spring(response: 0.25, dampingFraction: 0.8), value: showingCountAnimation)
                         .onChange(of: absenceCount) { oldValue, newValue in
-                            if newValue != previousCount {
-                                // 最小限でスマートなカウントエフェクト
+                            if newValue > previousCount {
+                                // カウントが増加した時のみエフェクトを発動
                                 withAnimation(.spring(response: 0.2, dampingFraction: 0.7)) {
                                     showingCountAnimation = true
                                 }
                                 
-                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
                                     withAnimation(.spring(response: 0.2, dampingFraction: 0.8)) {
                                         showingCountAnimation = false
                                     }
                                 }
-                                
-                                previousCount = newValue
                             }
+                            previousCount = newValue
+                        }
+                        .onAppear {
+                            // 初期値を設定
+                            previousCount = absenceCount
                         }
                         .frame(height: 32)
                     
@@ -450,7 +454,7 @@ struct EnhancedCourseCell: View {
         
         return Group {
             if course.isFullYear {
-                // 通年：2行5列（正方形）
+                // 通年：2行5列（最大欠席数まで表示）
                 VStack(spacing: 1) {
                     HStack(spacing: 1) {
                         ForEach(0..<5, id: \.self) { index in
@@ -468,9 +472,9 @@ struct EnhancedCourseCell: View {
                     }
                 }
             } else {
-                // 通常：1行（正方形）
+                // 通常：1行（最大欠席数まで表示）
                 HStack(spacing: 1) {
-                    ForEach(0..<min(8, maxAbsences), id: \.self) { index in
+                    ForEach(0..<min(5, maxAbsences), id: \.self) { index in
                         Rectangle()
                             .fill(getColorBoxColor(course: course, index: index, absenceCount: absenceCount))
                             .frame(width: boxSize, height: boxSize) // 完全な正方形
@@ -493,17 +497,28 @@ struct EnhancedCourseCell: View {
                 return Color(red: 0.4, green: 0.8, blue: 0.4) // 安全圏：目に優しいマットな緑
             }
         } else {
-            // まだ欠席していない部分：白色薄透明
-            return Color.white.opacity(0.4)
+            // まだ欠席していない部分：薄い灰色で予定エリアを表示
+            return Color.gray.opacity(0.3)
         }
     }
     
     private func limitCourseName(_ name: String) -> String {
         if name.count <= 6 {
             return name
+        } else if name.count <= 12 {
+            // 6文字目まで表示し、7文字目で改行して2行表示
+            let firstLineEnd = name.index(name.startIndex, offsetBy: 6)
+            let firstLine = String(name[..<firstLineEnd])
+            let secondLine = String(name[firstLineEnd...])
+            return firstLine + "\n" + secondLine
+        } else {
+            // 12文字を超える場合は12文字で切り捨て
+            let firstLineEnd = name.index(name.startIndex, offsetBy: 6)
+            let secondLineEnd = name.index(name.startIndex, offsetBy: 12)
+            let firstLine = String(name[..<firstLineEnd])
+            let secondLine = String(name[firstLineEnd..<secondLineEnd])
+            return firstLine + "\n" + secondLine
         }
-        let index = name.index(name.startIndex, offsetBy: 6)
-        return String(name[..<index])
     }
 }
 

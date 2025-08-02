@@ -20,6 +20,7 @@ class AttendanceViewModel: ObservableObject {
     @Published var currentSemester: Semester?
     @Published var timetable: [[Course?]] = Array(repeating: Array(repeating: nil, count: 5), count: 5)
     @Published var isLoading = false
+    @Published var isInitialized = false
     @Published var errorMessage: String?
     @Published var currentSemesterType: SemesterType = .firstHalf
     @Published var availableSemesters: [Semester] = []
@@ -34,9 +35,17 @@ class AttendanceViewModel: ObservableObject {
     init(persistenceController: PersistenceController = .shared) {
         self.persistenceController = persistenceController
         self.context = persistenceController.container.viewContext
-        setupSemesters()
-        loadCurrentSemester()
-        loadTimetable()
+        
+        // 初期化処理を順次実行し、確実に完了を確認
+        DispatchQueue.main.async {
+            self.setupSemesters()
+            self.loadCurrentSemester()
+            self.loadTimetable()
+            
+            // すべての初期化が完了してからフラグを設定
+            self.isInitialized = true
+            print("AttendanceViewModel initialization completed")
+        }
     }
     
     // MARK: - Public Methods
@@ -409,20 +418,36 @@ class AttendanceViewModel: ObservableObject {
         
         do {
             let courses = try context.fetch(courseRequest)
-            let courseIds = courses.map { $0.objectID }
             
-            // 該当学期の欠席記録をすべて削除
-            let recordRequest: NSFetchRequest<AttendanceRecord> = AttendanceRecord.fetchRequest()
-            recordRequest.predicate = NSPredicate(format: "course IN %@", courseIds)
-            
-            let records = try context.fetch(recordRequest)
-            for record in records {
-                context.delete(record)
+            // 削除対象の科目名を収集
+            var courseNamesToDelete = Set<String>()
+            for course in courses {
+                if let courseName = course.courseName {
+                    courseNamesToDelete.insert(courseName)
+                }
             }
             
-            // 該当学期の授業をすべて削除
-            for course in courses {
-                context.delete(course)
+            // 同名科目のすべてのコースと記録を削除（他学期含む）
+            for courseName in courseNamesToDelete {
+                let allSameCourseRequest: NSFetchRequest<Course> = Course.fetchRequest()
+                allSameCourseRequest.predicate = NSPredicate(format: "courseName == %@", courseName)
+                
+                let allSameCourses = try context.fetch(allSameCourseRequest)
+                let allCourseIds = allSameCourses.map { $0.objectID }
+                
+                // 関連する欠席記録をすべて削除
+                let recordRequest: NSFetchRequest<AttendanceRecord> = AttendanceRecord.fetchRequest()
+                recordRequest.predicate = NSPredicate(format: "course IN %@", allCourseIds)
+                
+                let records = try context.fetch(recordRequest)
+                for record in records {
+                    context.delete(record)
+                }
+                
+                // 同名のすべての授業を削除
+                for sameCourse in allSameCourses {
+                    context.delete(sameCourse)
+                }
             }
             
             saveContext()

@@ -398,6 +398,114 @@ Button(action: {}) {  // 空のアクションに変更
 
 ---
 
+## 2025-02-01: 白画面問題とCourseSelectionViewビルドエラー
+
+### 13. 白画面問題とCourseSelectionViewビルドエラー
+**🚨 問題の概要:**
+- アプリ起動後、初めてコママスをタップして授業登録・編集を行おうとすると、下から真っ白なシートが表示される
+- ビルド時にCourseSelectionView.swiftで構文エラーが発生
+
+**🔍 根本原因分析:**
+1. **構文エラー**: CourseSelectionView.swiftで重複したNavigationViewとtoolbar定義により余分な`}`が存在
+2. **関数呼び出しエラー**: `saveExistingCourse()`でCourseパラメータが不足
+3. **初期化問題**: AttendanceViewModelの非同期初期化が完了前にViewが表示される
+
+**🛠️ 解決手順:**
+
+#### 1. 構文エラー修正
+```swift
+// 削除: 重複したnavigationTitle以下の修飾子 (144-171行目)
+.navigationTitle("授業選択")
+.navigationBarTitleDisplayMode(.inline)
+.toolbar { /* 重複内容 */ }
+```
+
+#### 2. 関数呼び出し修正
+```swift
+// 修正前
+Button("保存") {
+    saveExistingCourse()  // パラメータ不足
+}
+
+// 修正後
+Button("保存") {
+    if let course = selectedExistingCourse {
+        saveExistingCourse(course)  // 正しいパラメータ
+    }
+}
+```
+
+#### 3. 初期化問題対応
+```swift
+// AttendanceViewModel.swift
+init(persistenceController: PersistenceController = .shared) {
+    // 非同期で初期化を実行
+    DispatchQueue.main.async {
+        self.setupSemesters()
+        self.loadCurrentSemester()
+        self.loadTimetable()
+        self.isInitialized = true
+    }
+}
+
+// EditCourseDetailView.swift
+var body: some View {
+    Group {
+        if !viewModel.isInitialized || viewModel.currentSemester == nil {
+            // ローディング状態を表示
+            VStack {
+                ProgressView()
+                Text("読み込み中...")
+            }
+        } else {
+            // メインコンテンツ
+        }
+    }
+}
+```
+
+#### 4. NavigationView重複解決
+```swift
+// TimetableView.swift
+.sheet(isPresented: $showingAddCourse) {
+    if let timeSlot = selectedTimeSlot {
+        NavigationView {  // 新規追加
+            CourseSelectionView(/* params */)
+        }
+        .navigationViewStyle(StackNavigationViewStyle())
+    }
+}
+```
+
+**✅ 解決結果:**
+- ビルドエラー解決 (BUILD SUCCEEDED)
+- 構文エラー完全修正
+- 初期化フローの適切な管理
+
+**🛡️ 再発防止策:**
+1. **コード重複チェック**: 同じ修飾子や構造の重複を避ける
+2. **型安全性**: 関数呼び出し時の引数チェックを徹底
+3. **初期化順序管理**: ViewModelの初期化完了を適切に管理
+4. **段階的テスト**: 各修正後に個別ビルドテストを実行
+5. **ペア構造チェック**: 開き括弧と閉じ括弧の数を定期確認
+
+**📊 修正ファイル一覧:**
+- `/Views/CourseSelectionView.swift` - 構文修正、関数呼び出し修正
+- `/ViewModels/AttendanceViewModel.swift` - 非同期初期化実装
+- `/Views/EditCourseDetailView.swift` - 初期化チェック追加
+- `/Views/TimetableView.swift` - NavigationView適切な配置
+
+**🎯 学習ポイント:**
+- SwiftUIのNavigationView階層管理の重要性
+- ViewModelライフサイクルとView表示タイミングの同期
+- 構文エラーの体系的なデバッグ手法
+
+---
+
+*この記録は2025-02-01時点での解決策です。同様の問題が発生した場合はこの手順を参考にしてください。*
+
+---
+
 ## 参考リンク
 - [SwiftUI ViewBuilder制限について](https://developer.apple.com/documentation/swiftui/viewbuilder)
 - [Core Data Best Practices](https://developer.apple.com/library/archive/documentation/Cocoa/Conceptual/CoreData/)

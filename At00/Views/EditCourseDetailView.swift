@@ -21,6 +21,7 @@ struct EditCourseDetailView: View {
     @State private var absenceRecords: [AttendanceRecord] = []
     @State private var showingDeleteAlert = false
     @State private var recordToDelete: AttendanceRecord?
+    @State private var deletedRecords: Set<AttendanceRecord> = []
     
     init(course: Course, viewModel: AttendanceViewModel) {
         self.course = course
@@ -35,50 +36,80 @@ struct EditCourseDetailView: View {
     private let dayNames = ["", "月", "火", "水", "木", "金", "土", "日"]
     
     var body: some View {
-        NavigationView {
-            ScrollView {
-                VStack(spacing: 16) {
-                    // ヘッダーセクション
-                    headerSection
-                    
-                    // 基本設定セクション
-                    basicSettingsSection
-                    
-                    // カラー選択セクション
-                    colorSelectionSection
-                    
-                    // 欠席記録セクション
-                    absenceRecordsSection
-                    
-                    // 削除セクション
-                    deleteSection
+        // ViewModelの初期化状態をチェック（NavigationViewなしで実装）
+        Group {
+            if !viewModel.isInitialized || viewModel.currentSemester == nil {
+                // 初期化中の表示
+                VStack {
+                    ProgressView()
+                        .scaleEffect(1.5)
+                        .padding()
+                    Text("読み込み中...")
+                        .foregroundColor(.secondary)
                 }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 12)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(Color(.systemGroupedBackground))
+            } else {
+                // メインコンテンツ
+                ScrollView {
+                    VStack(spacing: 16) {
+                        // ヘッダーセクション
+                        headerSection
+                        
+                        // 基本設定セクション
+                        basicSettingsSection
+                        
+                        // カラー選択セクション
+                        colorSelectionSection
+                        
+                        // 欠席記録セクション
+                        absenceRecordsSection
+                        
+                        // 削除セクション
+                        deleteSection
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 12)
+                }
+                .background(Color(.systemGroupedBackground))
             }
-            .background(Color(.systemGroupedBackground))
-            .navigationTitle("授業編集")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button("キャンセル") {
-                        dismiss()
-                    }
-                    .foregroundColor(.secondary)
+        }
+        .navigationTitle("授業編集")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .navigationBarLeading) {
+                Button("キャンセル") {
+                    // 削除予定の記録をリセット
+                    deletedRecords.removeAll()
+                    dismiss()
                 }
-                
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("保存") {
-                        saveChanges()
-                        dismiss()
-                    }
-                    .fontWeight(.semibold)
-                    .disabled(courseName.isEmpty)
+                .foregroundColor(.secondary)
+            }
+            
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button("保存") {
+                    saveChanges()
+                    dismiss()
                 }
+                .fontWeight(.semibold)
+                .disabled(courseName.isEmpty)
             }
         }
         .onAppear {
-            loadAbsenceRecords()
+            print("EditCourseDetailView appeared - isInitialized: \(viewModel.isInitialized), currentSemester: \(viewModel.currentSemester?.name ?? "nil")")
+            // ViewModelが初期化されてから欠席記録を読み込み
+            if viewModel.isInitialized && viewModel.currentSemester != nil {
+                loadAbsenceRecords()
+            }
+        }
+        .onChange(of: viewModel.isInitialized) { _, isInitialized in
+            print("EditCourseDetailView isInitialized changed to: \(isInitialized)")
+            // ViewModelの初期化完了時に欠席記録を読み込み
+            if isInitialized && viewModel.currentSemester != nil {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                    loadAbsenceRecords()
+                }
+            }
         }
         .alert("記録を削除", isPresented: $showingDeleteAlert) {
             Button("削除", role: .destructive) {
@@ -107,6 +138,12 @@ struct EditCourseDetailView: View {
                     .font(.title3)
                     .fontWeight(.semibold)
                     .textFieldStyle(PlainTextFieldStyle())
+                    .autocorrectionDisabled()
+                    .textInputAutocapitalization(.words)
+                    .submitLabel(.done)
+                    .onTapGesture {
+                        // TextFieldを確実にアクティブにする
+                    }
                 
                 Text("\(dayName)曜日 \(course.period)限")
                     .font(.subheadline)
@@ -346,21 +383,22 @@ struct EditCourseDetailView: View {
     }
     
     private func deleteAbsenceRecord(_ record: AttendanceRecord) {
-        viewModel.managedObjectContext.delete(record)
+        // 削除予定として記録（実際にはまだ削除しない）
+        deletedRecords.insert(record)
         
-        do {
-            try viewModel.managedObjectContext.save()
-            loadAbsenceRecords() // リロード
-            
-            // 統計データの更新を通知
-            NotificationCenter.default.post(name: .attendanceDataDidChange, object: nil)
-            NotificationCenter.default.post(name: .statisticsDataDidChange, object: nil)
-        } catch {
-            print("記録削除エラー: \(error)")
+        // 表示用のリストから削除
+        if let index = absenceRecords.firstIndex(of: record) {
+            absenceRecords.remove(at: index)
         }
     }
     
     private func saveChanges() {
+        // 削除予定の記録を実際に削除
+        for record in deletedRecords {
+            viewModel.managedObjectContext.delete(record)
+        }
+        
+        // コース情報を更新
         course.courseName = courseName
         course.totalClasses = Int16(totalClasses)
         course.maxAbsences = Int16(maxAbsences)
@@ -373,6 +411,7 @@ struct EditCourseDetailView: View {
         // コースデータの更新を通知
         NotificationCenter.default.post(name: .courseDataDidChange, object: nil)
         NotificationCenter.default.post(name: .statisticsDataDidChange, object: nil)
+        NotificationCenter.default.post(name: .attendanceDataDidChange, object: nil)
     }
 }
 

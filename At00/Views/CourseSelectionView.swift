@@ -35,9 +35,16 @@ struct CourseSelectionView: View {
     
     private let dayNames = ["", "月", "火", "水", "木", "金", "土", "日"]
     
+    private var canSave: Bool {
+        if selectedTab == .new {
+            return !newCourseName.isEmpty
+        } else {
+            return selectedExistingCourse != nil
+        }
+    }
+    
     var body: some View {
-        NavigationView {
-            VStack(spacing: 0) {
+        VStack(spacing: 0) {
                 // タブ選択
                 Picker("選択方法", selection: $selectedTab) {
                     ForEach(CourseSelectionTab.allCases, id: \.self) { tab in
@@ -48,7 +55,7 @@ struct CourseSelectionView: View {
                 .padding()
                 
                 // ViewModelが初期化されているか確認
-                if viewModel.currentSemester == nil {
+                if !viewModel.isInitialized || viewModel.currentSemester == nil {
                     // 初期化中の表示
                     VStack {
                         ProgressView()
@@ -110,7 +117,9 @@ struct CourseSelectionView: View {
                         .fontWeight(.semibold)
                     } else {
                         Button("保存") {
-                            saveExistingCourse()
+                            if let course = selectedExistingCourse {
+                                saveExistingCourse(course)
+                            }
                         }
                         .disabled(selectedExistingCourse == nil)
                         .fontWeight(.semibold)
@@ -135,11 +144,6 @@ struct CourseSelectionView: View {
             .background(Color(.systemGroupedBackground)) // 背景色を明示的に設定
             .animation(hasAppeared ? .easeInOut(duration: 0.3) : nil, value: selectedTab)
         }
-        .navigationViewStyle(StackNavigationViewStyle()) // iPadでも一貫した表示
-        .onAppear {
-            print("CourseSelectionView appeared for day: \(dayOfWeek), period: \(period)")
-        }
-    }
     
     private func loadAvailableExistingCourses() {
         guard let semester = viewModel.currentSemester else { return }
@@ -195,9 +199,7 @@ struct CourseSelectionView: View {
         }
     }
     
-    private func saveExistingCourse() {
-        guard let course = selectedExistingCourse else { return }
-        
+    private func saveExistingCourse(_ course: Course) {
         // 既存の授業を新しい時間割に配置（複製）
         viewModel.assignExistingCourse(
             course: course,
@@ -370,9 +372,12 @@ struct NewCourseCreationView: View {
                     TextField("授業名を入力", text: $courseName)
                         .textFieldStyle(RoundedBorderTextFieldStyle())
                         .font(.body)
-                        .keyboardType(.default)
                         .autocorrectionDisabled()
                         .textInputAutocapitalization(.words)
+                        .submitLabel(.done)
+                        .onTapGesture {
+                            // TextFieldを確実にアクティブにする
+                        }
                 }
                 .padding()
                 .background(
