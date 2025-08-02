@@ -297,7 +297,109 @@ Cannot assign value of type 'Bool' to type 'NSNumber'
 
 ---
 
+## 2025-08-02: タップ処理のダブルカウント問題解決
+
+### 11. EnhancedCourseCellのダブルカウント問題
+**エラー内容:**
+```
+1回のタップで欠席回数が2回増加する
+recordAbsence()が重複して呼び出される
+```
+
+**原因:**
+- `Button(action: onTap)`と`TapGesture().onEnded { onTap() }`の両方が同じ処理を実行
+- SwiftUIのジェスチャーシステムでアクションとジェスチャーが重複
+
+**根本原因の分析:**
+```swift
+// 問題のあるコード（TimetableView.swift:329行目）
+Button(action: onTap) {  // ← 1回目の呼び出し
+    // UI Content
+}
+.simultaneousGesture(
+    TapGesture()
+        .onEnded {
+            onTap()  // ← 2回目の呼び出し（重複）
+        }
+)
+```
+
+**対策:**
+```swift
+// 修正後のコード
+Button(action: {}) {  // 空のアクションに変更
+    // UI Content  
+}
+.simultaneousGesture(
+    TapGesture()
+        .onEnded {
+            onTap()  // ジェスチャーでのみ処理
+        }
+)
+```
+
+**検証方法:**
+1. コママスを1回タップ
+2. 欠席回数が1回だけ増加することを確認
+3. データベースに1件のみ記録されることを確認
+
+**予防策:**
+- SwiftUIでタップ処理を実装する際は、ButtonのactionかTapGestureのどちらか一方のみを使用
+- 複数のジェスチャーを組み合わせる場合は処理の重複を避ける
+- simultaneousGestureを使用する際は特に注意深くテストする
+
+---
+
+### 12. タップエフェクトの視認性問題
+**問題:**
+```
+タップ時にコママス全体が薄暗くなって内容が見にくい
+ダサいカウントエフェクト（+1テキスト、過度なアニメーション）
+```
+
+**原因:**
+- `Color.black.opacity(0.1)`のオーバーレイで暗くなる
+- 複雑なオフセットアニメーションとテキストエフェクト
+
+**対策:**
+```swift
+// 修正前：暗いオーバーレイ
+.overlay(
+    RoundedRectangle(cornerRadius: 8)
+        .fill(Color.black.opacity(isPressed ? 0.1 : 0))
+)
+
+// 修正後：スマートな膨らみエフェクト
+.scaleEffect(isPressed ? 1.05 : 1.0)
+.animation(.spring(response: 0.15, dampingFraction: 0.7), value: isPressed)
+```
+
+```swift
+// 修正前：複雑なカウントエフェクト
+.scaleEffect(showingCountAnimation ? 1.3 : 1.0)
+.offset(y: countOffset)
+// + "+1"テキスト表示
+
+// 修正後：最小限のエフェクト
+.scaleEffect(showingCountAnimation ? 1.1 : 1.0)
+.animation(.spring(response: 0.25, dampingFraction: 0.8), value: showingCountAnimation)
+```
+
+**改善結果:**
+- タップ時にコマ内容が明瞭に見える
+- 軽やかで上品な膨らみエフェクト
+- 数字の軽微なスケールアップで変更を示唆
+- 0.2秒の素早いレスポンス
+
+**予防策:**
+- UIエフェクトは最小限に抑えて機能性を重視
+- オーバーレイよりもスケールやオフセットでフィードバック提供
+- アニメーション時間は短く（0.1-0.3秒）設定
+
+---
+
 ## 参考リンク
 - [SwiftUI ViewBuilder制限について](https://developer.apple.com/documentation/swiftui/viewbuilder)
 - [Core Data Best Practices](https://developer.apple.com/library/archive/documentation/Cocoa/Conceptual/CoreData/)
 - [MVVM in SwiftUI](https://developer.apple.com/documentation/combine/receiving-and-handling-events-with-combine)
+- [SwiftUI Gesture処理のベストプラクティス](https://developer.apple.com/documentation/swiftui/gestures)

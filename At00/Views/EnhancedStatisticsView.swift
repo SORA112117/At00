@@ -12,6 +12,7 @@ struct EnhancedStatisticsView: View {
     @StateObject private var viewModel = AttendanceViewModel()
     @State private var selectedTimeFrame: TimeFrame = .monthly
     @State private var selectedPeriod = Date()
+    @State private var refreshTrigger = UUID() // リアルタイム更新用
     
     enum TimeFrame: String, CaseIterable {
         case monthly = "月"
@@ -30,27 +31,47 @@ struct EnhancedStatisticsView: View {
             let endOfMonth = calendar.dateInterval(of: .month, for: selectedPeriod)?.end ?? selectedPeriod
             return (startOfMonth, endOfMonth)
         case .yearly:
-            let startOfYear = calendar.dateInterval(of: .year, for: selectedPeriod)?.start ?? selectedPeriod
-            let endOfYear = calendar.dateInterval(of: .year, for: selectedPeriod)?.end ?? selectedPeriod
-            return (startOfYear, endOfYear)
+            // 年度表示（4月-3月）
+            let components = calendar.dateComponents([.year], from: selectedPeriod)
+            let year = components.year ?? calendar.component(.year, from: Date())
+            
+            // 年度の開始日（4月1日）
+            let startOfFiscalYear = calendar.date(from: DateComponents(year: year, month: 4, day: 1)) ?? selectedPeriod
+            
+            // 年度の終了日（翌年3月31日）
+            let endOfFiscalYear = calendar.date(from: DateComponents(year: year + 1, month: 3, day: 31, hour: 23, minute: 59, second: 59)) ?? selectedPeriod
+            
+            return (startOfFiscalYear, endOfFiscalYear)
         }
     }
     
     // 期間の表示テキスト
     private var periodDisplayText: String {
         let formatter = DateFormatter()
+        let calendar = Calendar.current
         
         switch selectedTimeFrame {
         case .monthly:
             formatter.dateFormat = "yyyy年M月"
             return formatter.string(from: selectedPeriod)
         case .yearly:
-            formatter.dateFormat = "yyyy年"
-            return formatter.string(from: selectedPeriod)
+            // 年度表示
+            let components = calendar.dateComponents([.year], from: selectedPeriod)
+            let year = components.year ?? calendar.component(.year, from: Date())
+            return "\(year)年度"
         }
     }
     
-    // すべての科目を取得
+    // 学期表示テキスト（月毎の時のみ）
+    private var semesterDisplayText: String? {
+        guard selectedTimeFrame == .monthly else { return nil }
+        
+        let calendar = Calendar.current
+        let month = calendar.component(.month, from: selectedPeriod)
+        return (month >= 4 && month <= 9) ? "前期" : "後期"
+    }
+    
+    // すべての科目を取得（同名科目は1つにまとめる）
     private var allCourses: [Course] {
         guard let semester = viewModel.currentSemester else { return [] }
         
@@ -61,7 +82,21 @@ struct EnhancedStatisticsView: View {
             NSSortDescriptor(keyPath: \Course.period, ascending: true)
         ]
         
-        return (try? viewModel.managedObjectContext.fetch(request)) ?? []
+        let allFetchedCourses = (try? viewModel.managedObjectContext.fetch(request)) ?? []
+        
+        // 同名科目を1つにまとめる（最初に見つかったものを代表とする）
+        var uniqueCourses: [Course] = []
+        var seenNames: Set<String> = []
+        
+        for course in allFetchedCourses {
+            let courseName = course.courseName ?? ""
+            if !seenNames.contains(courseName) {
+                seenNames.insert(courseName)
+                uniqueCourses.append(course)
+            }
+        }
+        
+        return uniqueCourses
     }
     
     // 期間内の最大欠席数（グラフの高さ正規化用）
@@ -90,9 +125,34 @@ struct EnhancedStatisticsView: View {
                     }
                 }
                 .padding()
+                .id(refreshTrigger) // リアルタイム更新用
             }
             .navigationTitle("出席統計")
             .navigationBarTitleDisplayMode(.large)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .statisticsDataDidChange)) { _ in
+            // 統計データが変更されたときに再描画
+            DispatchQueue.main.async {
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    refreshTrigger = UUID()
+                }
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .attendanceDataDidChange)) { _ in
+            // 欠席データが変更されたときに再描画
+            DispatchQueue.main.async {
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    refreshTrigger = UUID()
+                }
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .courseDataDidChange)) { _ in
+            // コースデータが変更されたときに再描画
+            DispatchQueue.main.async {
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    refreshTrigger = UUID()
+                }
+            }
         }
     }
     
@@ -119,9 +179,13 @@ struct EnhancedStatisticsView: View {
                 VStack(spacing: 4) {
                     Text(periodDisplayText)
                         .font(.headline)
-                    Text(viewModel.currentSemesterType.displayName)
-                        .font(.caption)
-                        .foregroundColor(.secondary)
+                    
+                    // 月毎表示の時のみ学期ラベルを表示
+                    if let semesterText = semesterDisplayText {
+                        Text(semesterText)
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
                 }
                 
                 Spacer()
@@ -240,7 +304,12 @@ struct EnhancedStatisticsView: View {
             Text("詳細")
                 .font(.headline)
             
-            ForEach(allCourses, id: \.courseId) { course in
+            // 欠席回数が多い順にソート
+            let sortedCourses = allCourses.sorted { course1, course2 in
+                getAbsencesInPeriod(for: course1).count > getAbsencesInPeriod(for: course2).count
+            }
+            
+            ForEach(sortedCourses, id: \.courseId) { course in
                 courseDetailRow(course: course)
             }
         }
@@ -263,7 +332,7 @@ struct EnhancedStatisticsView: View {
                     Text("\(getAbsencesInPeriod(for: course).count)回")
                         .font(.subheadline)
                         .fontWeight(.medium)
-                        .foregroundColor(DesignSystem.getColor(for: Int(course.colorIndex)))
+                        .foregroundColor(.primary)
                 }
                 
                 HStack {
@@ -336,12 +405,28 @@ struct EnhancedStatisticsView: View {
     private func getAbsencesInPeriod(for course: Course) -> [AttendanceRecord] {
         let (startDate, endDate) = currentPeriodDates
         
-        guard let records = course.attendanceRecords as? Set<AttendanceRecord> else { return [] }
+        // 同名科目のすべての欠席記録を取得（通年科目対応）
+        guard let courseName = course.courseName else { return [] }
         
-        return records.filter { record in
-            guard let date = record.date else { return false }
-            return date >= startDate && date <= endDate && 
-                   AttendanceType(rawValue: record.type ?? "")?.affectsCredit == true
+        let request: NSFetchRequest<AttendanceRecord> = AttendanceRecord.fetchRequest()
+        let courseRequest: NSFetchRequest<Course> = Course.fetchRequest()
+        courseRequest.predicate = NSPredicate(format: "courseName == %@", courseName)
+        
+        do {
+            let allSameNameCourses = try viewModel.managedObjectContext.fetch(courseRequest)
+            let courseIds = allSameNameCourses.map { $0.objectID }
+            
+            request.predicate = NSPredicate(
+                format: "course IN %@ AND date >= %@ AND date <= %@ AND type IN %@",
+                courseIds,
+                startDate as NSDate,
+                endDate as NSDate,
+                AttendanceType.allCases.filter { $0.affectsCredit }.map { $0.rawValue }
+            )
+            
+            return try viewModel.managedObjectContext.fetch(request)
+        } catch {
+            return []
         }
     }
     

@@ -9,6 +9,13 @@ import Foundation
 import CoreData
 import SwiftUI
 
+// MARK: - データ更新通知
+extension Notification.Name {
+    static let attendanceDataDidChange = Notification.Name("attendanceDataDidChange")
+    static let courseDataDidChange = Notification.Name("courseDataDidChange")
+    static let statisticsDataDidChange = Notification.Name("statisticsDataDidChange")
+}
+
 class AttendanceViewModel: ObservableObject {
     @Published var currentSemester: Semester?
     @Published var timetable: [[Course?]] = Array(repeating: Array(repeating: nil, count: 5), count: 5)
@@ -105,6 +112,10 @@ class AttendanceViewModel: ObservableObject {
             }
             
             saveContext()
+            
+            // 統計データの更新を通知
+            NotificationCenter.default.post(name: .attendanceDataDidChange, object: nil)
+            NotificationCenter.default.post(name: .statisticsDataDidChange, object: nil)
         } catch {
             errorMessage = "欠席記録の保存に失敗しました: \(error.localizedDescription)"
         }
@@ -136,6 +147,10 @@ class AttendanceViewModel: ObservableObject {
             }
             
             saveContext()
+            
+            // 統計データの更新を通知
+            NotificationCenter.default.post(name: .attendanceDataDidChange, object: nil)
+            NotificationCenter.default.post(name: .statisticsDataDidChange, object: nil)
         } catch {
             errorMessage = "記録の取り消しに失敗しました: \(error.localizedDescription)"
         }
@@ -143,15 +158,40 @@ class AttendanceViewModel: ObservableObject {
     
     // 授業の欠席回数を取得
     func getAbsenceCount(for course: Course) -> Int {
-        let request: NSFetchRequest<AttendanceRecord> = AttendanceRecord.fetchRequest()
-        request.predicate = NSPredicate(format: "course == %@ AND type IN %@", 
-                                      course, 
-                                      AttendanceType.allCases.filter { $0.affectsCredit }.map { $0.rawValue })
-        
-        do {
-            return try context.count(for: request)
-        } catch {
-            return 0
+        // 通年科目の場合は前期・後期両方の欠席記録を合算
+        if course.isFullYear, let courseName = course.courseName {
+            let request: NSFetchRequest<AttendanceRecord> = AttendanceRecord.fetchRequest()
+            
+            // 同じ名前の全ての授業（前期・後期含む）の欠席記録を取得
+            let courseRequest: NSFetchRequest<Course> = Course.fetchRequest()
+            courseRequest.predicate = NSPredicate(format: "courseName == %@", courseName)
+            
+            do {
+                let allCourses = try context.fetch(courseRequest)
+                let courseIds = allCourses.map { $0.objectID }
+                
+                request.predicate = NSPredicate(
+                    format: "course IN %@ AND type IN %@",
+                    courseIds,
+                    AttendanceType.allCases.filter { $0.affectsCredit }.map { $0.rawValue }
+                )
+                
+                return try context.count(for: request)
+            } catch {
+                return 0
+            }
+        } else {
+            // 通常科目の場合は従来通り
+            let request: NSFetchRequest<AttendanceRecord> = AttendanceRecord.fetchRequest()
+            request.predicate = NSPredicate(format: "course == %@ AND type IN %@", 
+                                          course, 
+                                          AttendanceType.allCases.filter { $0.affectsCredit }.map { $0.rawValue })
+            
+            do {
+                return try context.count(for: request)
+            } catch {
+                return 0
+            }
         }
     }
     
@@ -225,6 +265,10 @@ class AttendanceViewModel: ObservableObject {
         
         saveContext()
         loadTimetable()
+        
+        // コースデータの更新を通知
+        NotificationCenter.default.post(name: .courseDataDidChange, object: nil)
+        NotificationCenter.default.post(name: .statisticsDataDidChange, object: nil)
     }
     
     // 同名授業の既存欠席記録を取得
@@ -299,18 +343,99 @@ class AttendanceViewModel: ObservableObject {
         
         saveContext()
         loadTimetable()
+        
+        // コースデータの更新を通知
+        NotificationCenter.default.post(name: .courseDataDidChange, object: nil)
+        NotificationCenter.default.post(name: .statisticsDataDidChange, object: nil)
     }
     
-    // 授業を削除
+    // 授業を削除（同名科目と関連データをすべて削除）
     func deleteCourse(_ course: Course) {
-        context.delete(course)
-        saveContext()
-        loadTimetable()
+        guard let courseName = course.courseName else {
+            // 単一のコースのみ削除
+            context.delete(course)
+            saveContext()
+            loadTimetable()
+            
+            // コースデータの更新を通知
+            NotificationCenter.default.post(name: .courseDataDidChange, object: nil)
+            NotificationCenter.default.post(name: .statisticsDataDidChange, object: nil)
+            return
+        }
+        
+        // 同名の全ての授業を取得
+        let courseRequest: NSFetchRequest<Course> = Course.fetchRequest()
+        courseRequest.predicate = NSPredicate(format: "courseName == %@", courseName)
+        
+        do {
+            let sameCourses = try context.fetch(courseRequest)
+            let courseIds = sameCourses.map { $0.objectID }
+            
+            // 関連する欠席記録をすべて削除
+            let recordRequest: NSFetchRequest<AttendanceRecord> = AttendanceRecord.fetchRequest()
+            recordRequest.predicate = NSPredicate(format: "course IN %@", courseIds)
+            
+            let records = try context.fetch(recordRequest)
+            for record in records {
+                context.delete(record)
+            }
+            
+            // 同名の全ての授業を削除
+            for sameCourse in sameCourses {
+                context.delete(sameCourse)
+            }
+            
+            saveContext()
+            loadTimetable()
+            
+            // コースデータの更新を通知
+            NotificationCenter.default.post(name: .courseDataDidChange, object: nil)
+            NotificationCenter.default.post(name: .statisticsDataDidChange, object: nil)
+            
+        } catch {
+            errorMessage = "授業の削除に失敗しました: \(error.localizedDescription)"
+        }
     }
     
     // データを保存（外部からアクセス可能）
     func save() {
         saveContext()
+    }
+    
+    // 指定した学期の時間割をリセット
+    func resetSemesterTimetable(for semester: Semester) {
+        let courseRequest: NSFetchRequest<Course> = Course.fetchRequest()
+        courseRequest.predicate = NSPredicate(format: "semester == %@", semester)
+        
+        do {
+            let courses = try context.fetch(courseRequest)
+            let courseIds = courses.map { $0.objectID }
+            
+            // 該当学期の欠席記録をすべて削除
+            let recordRequest: NSFetchRequest<AttendanceRecord> = AttendanceRecord.fetchRequest()
+            recordRequest.predicate = NSPredicate(format: "course IN %@", courseIds)
+            
+            let records = try context.fetch(recordRequest)
+            for record in records {
+                context.delete(record)
+            }
+            
+            // 該当学期の授業をすべて削除
+            for course in courses {
+                context.delete(course)
+            }
+            
+            saveContext()
+            loadTimetable()
+            
+            // コースデータの更新を通知
+            NotificationCenter.default.post(name: .courseDataDidChange, object: nil)
+            NotificationCenter.default.post(name: .attendanceDataDidChange, object: nil)
+            NotificationCenter.default.post(name: .statisticsDataDidChange, object: nil)
+            
+        } catch {
+            errorMessage = "学期リセットに失敗しました: \(error.localizedDescription)"
+        }
     }
     
     // 学期を切り替える

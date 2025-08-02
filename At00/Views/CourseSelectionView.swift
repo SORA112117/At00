@@ -261,9 +261,11 @@ struct ExistingCourseSelectionView: View {
                 ScrollView {
                     LazyVStack(spacing: 8) {
                         ForEach(availableCourses, id: \.courseId) { course in
+                            let isSelected = selectedCourse?.courseId == course.courseId
                             SimpleExistingCourseCard(
                                 course: course,
-                                isSelected: selectedCourse?.courseId == course.courseId,
+                                isSelected: isSelected,
+                                viewModel: viewModel,
                                 onSelection: {
                                     selectedCourse = course
                                 }
@@ -282,6 +284,7 @@ struct ExistingCourseSelectionView: View {
 struct SimpleExistingCourseCard: View {
     let course: Course
     let isSelected: Bool
+    @ObservedObject var viewModel: AttendanceViewModel
     let onSelection: () -> Void
     
     var body: some View {
@@ -312,7 +315,7 @@ struct SimpleExistingCourseCard: View {
                         .lineLimit(1)
                     
                     HStack(spacing: 8) {
-                        Text("欠席: \(getAbsenceCount())")
+                        Text("欠席: \(viewModel.getAbsenceCount(for: course))回")
                             .font(.caption)
                             .foregroundColor(.secondary)
                         
@@ -339,11 +342,6 @@ struct SimpleExistingCourseCard: View {
         }
     }
     
-    // ダミーの欠席数取得（簡略化）
-    private func getAbsenceCount() -> Int {
-        // 実際の実装では viewModel.getAbsenceCount(for: course) を使用
-        return 0
-    }
 }
 
 // MARK: - 新規作成ビュー

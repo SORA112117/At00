@@ -2,10 +2,11 @@
 //  EditCourseDetailView.swift
 //  At00
 //
-//  授業詳細編集画面
+//  授業詳細編集画面 - モダン＆シンプルデザイン
 //
 
 import SwiftUI
+import CoreData
 
 struct EditCourseDetailView: View {
     let course: Course
@@ -15,9 +16,11 @@ struct EditCourseDetailView: View {
     @State private var courseName: String
     @State private var totalClasses: Int
     @State private var maxAbsences: Int
-    @State private var isNotificationEnabled: Bool
     @State private var selectedColorIndex: Int
     @State private var isFullYear: Bool
+    @State private var absenceRecords: [AttendanceRecord] = []
+    @State private var showingDeleteAlert = false
+    @State private var recordToDelete: AttendanceRecord?
     
     init(course: Course, viewModel: AttendanceViewModel) {
         self.course = course
@@ -25,7 +28,6 @@ struct EditCourseDetailView: View {
         self._courseName = State(initialValue: course.courseName ?? "")
         self._totalClasses = State(initialValue: Int(course.totalClasses))
         self._maxAbsences = State(initialValue: Int(course.maxAbsences))
-        self._isNotificationEnabled = State(initialValue: course.isNotificationEnabled)
         self._selectedColorIndex = State(initialValue: Int(course.colorIndex))
         self._isFullYear = State(initialValue: course.isFullYear)
     }
@@ -35,155 +37,26 @@ struct EditCourseDetailView: View {
     var body: some View {
         NavigationView {
             ScrollView {
-                VStack(spacing: 24) {
-                    // ヘッダー
-                    VStack(spacing: 16) {
-                        HStack {
-                            Rectangle()
-                                .fill(DesignSystem.getColor(for: selectedColorIndex))
-                                .frame(width: 6, height: 80)
-                                .cornerRadius(3)
-                                .animation(.spring(), value: selectedColorIndex)
-                            
-                            VStack(alignment: .leading, spacing: 8) {
-                                TextField("授業名", text: $courseName)
-                                    .font(.title2)
-                                    .fontWeight(.bold)
-                                    .textFieldStyle(PlainTextFieldStyle())
-                                
-                                Text("\(dayName)曜日 \(course.period)限")
-                                    .font(.subheadline)
-                                    .foregroundColor(.secondary)
-                            }
-                            
-                            Spacer()
-                        }
-                        
-                        // 現在の出席状況表示
-                        HStack(spacing: 20) {
-                            VStack {
-                                Text("\(viewModel.getAbsenceCount(for: course))")
-                                    .font(.system(size: 28, weight: .bold))
-                                    .foregroundColor(viewModel.getStatusColor(for: course))
-                                
-                                Text("現在の欠席")
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
-                            }
-                            
-                            VStack {
-                                Text("\(viewModel.getRemainingAbsences(for: course))")
-                                    .font(.system(size: 28, weight: .bold))
-                                    .foregroundColor(.green)
-                                
-                                Text("残り可能")
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
-                            }
-                        }
-                    }
-                    .padding()
-                    .cardStyle()
+                VStack(spacing: 16) {
+                    // ヘッダーセクション
+                    headerSection
                     
-                    // 編集フォーム
-                    VStack(spacing: 20) {
-                        // 授業設定
-                        VStack(alignment: .leading, spacing: 16) {
-                            Text("授業設定")
-                                .font(.headline)
-                            
-                            VStack(spacing: 12) {
-                                HStack {
-                                    Text("総授業回数")
-                                    Spacer()
-                                    Stepper(value: $totalClasses, in: 1...50) {
-                                        Text("\(totalClasses)回")
-                                            .font(.system(size: 16, weight: .medium))
-                                    }
-                                }
-                                
-                                HStack {
-                                    Text("最大欠席可能")
-                                    Spacer()
-                                    Stepper(value: $maxAbsences, in: 1...20) {
-                                        Text("\(maxAbsences)回")
-                                            .font(.system(size: 16, weight: .medium))
-                                    }
-                                }
-                                
-                                HStack {
-                                    Text("通年科目")
-                                    Spacer()
-                                    Toggle("", isOn: $isFullYear)
-                                }
-                                
-                                HStack {
-                                    Text("通知")
-                                    Spacer()
-                                    Toggle("", isOn: $isNotificationEnabled)
-                                }
-                            }
-                        }
-                        .padding()
-                        .cardStyle()
-                        
-                        // カラー選択
-                        VStack(alignment: .leading, spacing: 16) {
-                            Text("カラー")
-                                .font(.headline)
-                            
-                            LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 8), spacing: 12) {
-                                ForEach(0..<12, id: \.self) { index in
-                                    Button {
-                                        withAnimation(.spring(response: 0.3)) {
-                                            selectedColorIndex = index
-                                        }
-                                    } label: {
-                                        ZStack {
-                                            Circle()
-                                                .fill(DesignSystem.getColor(for: index))
-                                                .frame(width: 40, height: 40)
-                                            
-                                            if selectedColorIndex == index {
-                                                Circle()
-                                                    .stroke(Color.primary, lineWidth: 3)
-                                                    .frame(width: 40, height: 40)
-                                                
-                                                Image(systemName: "checkmark")
-                                                    .foregroundColor(.white)
-                                                    .font(.system(size: 12, weight: .bold))
-                                            }
-                                        }
-                                    }
-                                    .buttonStyle(PlainButtonStyle())
-                                }
-                            }
-                        }
-                        .padding()
-                        .cardStyle()
-                        
-                        // 危険なアクション
-                        VStack(alignment: .leading, spacing: 16) {
-                            Text("危険なアクション")
-                                .font(.headline)
-                                .foregroundColor(.red)
-                            
-                            Button("この授業を削除") {
-                                viewModel.deleteCourse(course)
-                                dismiss()
-                            }
-                            .foregroundColor(.red)
-                            .frame(maxWidth: .infinity)
-                            .padding()
-                            .background(Color.red.opacity(0.1))
-                            .cornerRadius(12)
-                        }
-                        .padding()
-                        .cardStyle()
-                    }
+                    // 基本設定セクション
+                    basicSettingsSection
+                    
+                    // カラー選択セクション
+                    colorSelectionSection
+                    
+                    // 欠席記録セクション
+                    absenceRecordsSection
+                    
+                    // 削除セクション
+                    deleteSection
                 }
-                .padding()
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
             }
+            .background(Color(.systemGroupedBackground))
             .navigationTitle("授業編集")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -191,6 +64,7 @@ struct EditCourseDetailView: View {
                     Button("キャンセル") {
                         dismiss()
                     }
+                    .foregroundColor(.secondary)
                 }
                 
                 ToolbarItem(placement: .navigationBarTrailing) {
@@ -203,23 +77,302 @@ struct EditCourseDetailView: View {
                 }
             }
         }
+        .onAppear {
+            loadAbsenceRecords()
+        }
+        .alert("記録を削除", isPresented: $showingDeleteAlert) {
+            Button("削除", role: .destructive) {
+                if let record = recordToDelete {
+                    deleteAbsenceRecord(record)
+                }
+            }
+            Button("キャンセル", role: .cancel) {}
+        } message: {
+            Text("この欠席記録を削除しますか？")
+        }
     }
+    
+    // MARK: - View Components
+    
+    private var headerSection: some View {
+        HStack(spacing: 12) {
+            // カラーライン
+            RoundedRectangle(cornerRadius: 3)
+                .fill(DesignSystem.getColor(for: selectedColorIndex))
+                .frame(width: 4, height: 50)
+                .animation(.spring(response: 0.4), value: selectedColorIndex)
+            
+            VStack(alignment: .leading, spacing: 6) {
+                TextField("授業名", text: $courseName)
+                    .font(.title3)
+                    .fontWeight(.semibold)
+                    .textFieldStyle(PlainTextFieldStyle())
+                
+                Text("\(dayName)曜日 \(course.period)限")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+            }
+            
+            Spacer()
+            
+            VStack(spacing: 2) {
+                Text("\(viewModel.getAbsenceCount(for: course))")
+                    .font(.title2)
+                    .fontWeight(.bold)
+                    .foregroundColor(.primary)
+                
+                Text("欠席")
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+            }
+        }
+        .padding(16)
+        .background(Color(.systemBackground))
+        .cornerRadius(12)
+        .shadow(color: .black.opacity(0.05), radius: 4, x: 0, y: 2)
+    }
+    
+    private var basicSettingsSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("基本設定")
+                .font(.system(size: 17, weight: .semibold))
+            
+            VStack(spacing: 0) {
+                settingRow(title: "総授業回数", value: "\(totalClasses)回") {
+                    Stepper("", value: $totalClasses, in: 1...50)
+                        .labelsHidden()
+                }
+                
+                Divider()
+                    .padding(.leading, 12)
+                
+                settingRow(title: "最大欠席可能", value: "\(maxAbsences)回") {
+                    Stepper("", value: $maxAbsences, in: 1...20)
+                        .labelsHidden()
+                }
+                
+                Divider()
+                    .padding(.leading, 12)
+                
+                settingRow(title: "通年科目", value: "") {
+                    Toggle("", isOn: $isFullYear)
+                        .labelsHidden()
+                }
+            }
+        }
+        .padding(16)
+        .background(Color(.systemBackground))
+        .cornerRadius(12)
+        .shadow(color: .black.opacity(0.05), radius: 4, x: 0, y: 2)
+    }
+    
+    private var colorSelectionSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("カラー")
+                .font(.system(size: 17, weight: .semibold))
+            
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 8), spacing: 10) {
+                ForEach(0..<12, id: \.self) { index in
+                    Button {
+                        withAnimation(.spring(response: 0.3)) {
+                            selectedColorIndex = index
+                        }
+                    } label: {
+                        Circle()
+                            .fill(DesignSystem.getColor(for: index))
+                            .frame(width: 32, height: 32)
+                            .overlay(
+                                Circle()
+                                    .stroke(Color.primary, lineWidth: selectedColorIndex == index ? 2.5 : 0)
+                                    .scaleEffect(selectedColorIndex == index ? 1.1 : 1.0)
+                                    .animation(.spring(response: 0.3), value: selectedColorIndex)
+                            )
+                    }
+                    .buttonStyle(PlainButtonStyle())
+                }
+            }
+        }
+        .padding(16)
+        .background(Color(.systemBackground))
+        .cornerRadius(12)
+        .shadow(color: .black.opacity(0.05), radius: 4, x: 0, y: 2)
+    }
+    
+    private var absenceRecordsSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text("欠席記録")
+                    .font(.system(size: 17, weight: .semibold))
+                
+                Spacer()
+                
+                Text("\(absenceRecords.count)件")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+            }
+            
+            if absenceRecords.isEmpty {
+                VStack(spacing: 6) {
+                    Image(systemName: "checkmark.circle")
+                        .font(.title3)
+                        .foregroundColor(.green)
+                    
+                    Text("欠席記録はありません")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 16)
+            } else {
+                LazyVStack(spacing: 6) {
+                    ForEach(absenceRecords, id: \.recordId) { record in
+                        absenceRecordRow(record: record)
+                    }
+                }
+            }
+        }
+        .padding(16)
+        .background(Color(.systemBackground))
+        .cornerRadius(12)
+        .shadow(color: .black.opacity(0.05), radius: 4, x: 0, y: 2)
+    }
+    
+    private var deleteSection: some View {
+        Button {
+            viewModel.deleteCourse(course)
+            dismiss()
+        } label: {
+            HStack {
+                Image(systemName: "trash")
+                Text("授業を削除")
+            }
+            .font(.system(size: 15, weight: .medium))
+            .foregroundColor(.white)
+            .frame(maxWidth: .infinity)
+            .padding(12)
+            .background(Color.red)
+            .cornerRadius(10)
+        }
+        .buttonStyle(PlainButtonStyle())
+    }
+    
+    private func settingRow<Content: View>(title: String, value: String, @ViewBuilder control: () -> Content) -> some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 1) {
+                Text(title)
+                    .font(.system(size: 15, weight: .medium))
+                
+                if !value.isEmpty {
+                    Text(value)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            }
+            
+            Spacer()
+            
+            control()
+        }
+        .padding(.vertical, 10)
+        .padding(.horizontal, 12)
+    }
+    
+    private func absenceRecordRow(record: AttendanceRecord) -> some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(formatDate(record.date ?? Date()))
+                    .font(.system(size: 15, weight: .medium))
+                
+                Text(AttendanceType(rawValue: record.type ?? "")?.displayName ?? "欠席")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+            
+            Spacer()
+            
+            Button {
+                recordToDelete = record
+                showingDeleteAlert = true
+            } label: {
+                Image(systemName: "minus.circle.fill")
+                    .font(.system(size: 18))
+                    .foregroundColor(.red)
+            }
+            .buttonStyle(PlainButtonStyle())
+        }
+        .padding(.vertical, 8)
+        .padding(.horizontal, 12)
+        .background(Color(.secondarySystemBackground))
+        .cornerRadius(8)
+    }
+    
+    // MARK: - Helper Methods
     
     private var dayName: String {
         let index = Int(course.dayOfWeek)
         return index > 0 && index < dayNames.count ? dayNames[index] : ""
     }
     
+    private func formatDate(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "M月d日(E)"
+        formatter.locale = Locale(identifier: "ja_JP")
+        return formatter.string(from: date)
+    }
+    
+    private func loadAbsenceRecords() {
+        // 同名科目のすべての欠席記録を取得
+        guard let courseName = course.courseName else { return }
+        
+        let request: NSFetchRequest<AttendanceRecord> = AttendanceRecord.fetchRequest()
+        let courseRequest: NSFetchRequest<Course> = Course.fetchRequest()
+        courseRequest.predicate = NSPredicate(format: "courseName == %@", courseName)
+        
+        do {
+            let allSameNameCourses = try viewModel.managedObjectContext.fetch(courseRequest)
+            let courseIds = allSameNameCourses.map { $0.objectID }
+            
+            request.predicate = NSPredicate(
+                format: "course IN %@ AND type IN %@",
+                courseIds,
+                AttendanceType.allCases.filter { $0.affectsCredit }.map { $0.rawValue }
+            )
+            request.sortDescriptors = [NSSortDescriptor(keyPath: \AttendanceRecord.date, ascending: false)]
+            
+            absenceRecords = try viewModel.managedObjectContext.fetch(request)
+        } catch {
+            print("欠席記録の読み込みエラー: \(error)")
+        }
+    }
+    
+    private func deleteAbsenceRecord(_ record: AttendanceRecord) {
+        viewModel.managedObjectContext.delete(record)
+        
+        do {
+            try viewModel.managedObjectContext.save()
+            loadAbsenceRecords() // リロード
+            
+            // 統計データの更新を通知
+            NotificationCenter.default.post(name: .attendanceDataDidChange, object: nil)
+            NotificationCenter.default.post(name: .statisticsDataDidChange, object: nil)
+        } catch {
+            print("記録削除エラー: \(error)")
+        }
+    }
+    
     private func saveChanges() {
         course.courseName = courseName
         course.totalClasses = Int16(totalClasses)
         course.maxAbsences = Int16(maxAbsences)
-        course.isNotificationEnabled = isNotificationEnabled
         course.colorIndex = Int16(selectedColorIndex)
         course.isFullYear = isFullYear
         
         viewModel.save()
         viewModel.loadTimetable()
+        
+        // コースデータの更新を通知
+        NotificationCenter.default.post(name: .courseDataDidChange, object: nil)
+        NotificationCenter.default.post(name: .statisticsDataDidChange, object: nil)
     }
 }
 

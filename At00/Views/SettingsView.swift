@@ -14,7 +14,8 @@ struct SettingsView: View {
     @StateObject private var viewModel = AttendanceViewModel()
     @State private var showingNewSemester = false
     @State private var showingDataExport = false
-    @State private var showingDeleteConfirmation = false
+    @State private var showingResetConfirmation = false
+    @State private var selectedSemesterForReset: Semester?
     
     var body: some View {
         NavigationView {
@@ -43,14 +44,6 @@ struct SettingsView: View {
                 
                 // 出席設定セクション
                 Section("出席設定") {
-                    NavigationLink("授業管理") {
-                        CourseManagementView(viewModel: viewModel)
-                    }
-                    
-                    NavigationLink("時限時間設定") {
-                        PeriodTimeSettingsView()
-                    }
-                    
                     NavigationLink("通知設定") {
                         NotificationSettingsView()
                     }
@@ -79,10 +72,10 @@ struct SettingsView: View {
                     }
                     .foregroundColor(.blue)
                     
-                    Button("すべてのデータを削除") {
-                        showingDeleteConfirmation = true
+                    NavigationLink("学期別時間割リセット") {
+                        SemesterResetView(viewModel: viewModel)
                     }
-                    .foregroundColor(.red)
+                    .foregroundColor(.orange)
                 }
                 
                 // アプリ情報セクション
@@ -115,50 +108,6 @@ struct SettingsView: View {
             .sheet(isPresented: $showingDataExport) {
                 DataExportView()
             }
-            .alert("データ削除の確認", isPresented: $showingDeleteConfirmation) {
-                Button("削除", role: .destructive) {
-                    deleteAllData()
-                }
-                Button("キャンセル", role: .cancel) {}
-            } message: {
-                Text("すべてのデータが削除されます。この操作は取り消せません。")
-            }
-        }
-    }
-    
-    private func deleteAllData() {
-        let context = viewModel.managedObjectContext
-        
-        // すべてのエンティティを削除
-        deleteAllEntities(of: AttendanceRecord.self, in: context)
-        deleteAllEntities(of: Course.self, in: context)
-        deleteAllEntities(of: Semester.self, in: context)
-        deleteAllEntities(of: PeriodTime.self, in: context)
-        
-        // 変更を保存
-        do {
-            try context.save()
-            
-            // ViewModelを再初期化して学期を再作成
-            viewModel.setupSemesters()
-            viewModel.loadCurrentSemester()
-            viewModel.loadTimetable()
-            
-        } catch {
-            print("データ削除エラー: \(error)")
-        }
-    }
-    
-    private func deleteAllEntities<T: NSManagedObject>(of entityType: T.Type, in context: NSManagedObjectContext) {
-        let fetchRequest = NSFetchRequest<T>(entityName: String(describing: entityType))
-        
-        do {
-            let entities = try context.fetch(fetchRequest)
-            for entity in entities {
-                context.delete(entity)
-            }
-        } catch {
-            print("\(entityType)の削除エラー: \(error)")
         }
     }
 }
@@ -232,155 +181,6 @@ struct NewSemesterView: View {
     }
 }
 
-struct CourseManagementView: View {
-    @ObservedObject var viewModel: AttendanceViewModel
-    
-    var body: some View {
-        List {
-            ForEach(getAllCourses(), id: \.courseId) { course in
-                NavigationLink {
-                    CourseEditView(course: course, viewModel: viewModel)
-                } label: {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(course.courseName ?? "")
-                            .font(.headline)
-                        
-                        Text("\(dayName(for: course.dayOfWeek))曜日 \(course.period)限")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                        
-                        HStack {
-                            Text("欠席: \(viewModel.getAbsenceCount(for: course))回")
-                                .font(.caption)
-                                .foregroundColor(.red)
-                            
-                            Spacer()
-                            
-                            Circle()
-                                .fill(viewModel.getStatusColor(for: course))
-                                .frame(width: 12, height: 12)
-                        }
-                    }
-                    .padding(.vertical, 4)
-                }
-            }
-            .onDelete(perform: deleteCourses)
-        }
-        .navigationTitle("授業管理")
-        .navigationBarTitleDisplayMode(.inline)
-    }
-    
-    private func getAllCourses() -> [Course] {
-        guard let semester = viewModel.currentSemester else { return [] }
-        
-        let request: NSFetchRequest<Course> = Course.fetchRequest()
-        request.predicate = NSPredicate(format: "semester == %@", semester)
-        request.sortDescriptors = [
-            NSSortDescriptor(keyPath: \Course.dayOfWeek, ascending: true),
-            NSSortDescriptor(keyPath: \Course.period, ascending: true)
-        ]
-        
-        return (try? viewModel.managedObjectContext.fetch(request)) ?? []
-    }
-    
-    private func dayName(for dayOfWeek: Int16) -> String {
-        let days = ["", "月", "火", "水", "木", "金", "土", "日"]
-        let index = Int(dayOfWeek)
-        return index > 0 && index < days.count ? days[index] : ""
-    }
-    
-    private func deleteCourses(offsets: IndexSet) {
-        let courses = getAllCourses()
-        for index in offsets {
-            viewModel.deleteCourse(courses[index])
-        }
-    }
-}
-
-struct CourseEditView: View {
-    let course: Course
-    @ObservedObject var viewModel: AttendanceViewModel
-    @Environment(\.dismiss) private var dismiss
-    
-    @State private var courseName: String
-    @State private var totalClasses: Int
-    @State private var maxAbsences: Int
-    @State private var isNotificationEnabled: Bool
-    
-    init(course: Course, viewModel: AttendanceViewModel) {
-        self.course = course
-        self.viewModel = viewModel
-        self._courseName = State(initialValue: course.courseName ?? "")
-        self._totalClasses = State(initialValue: Int(course.totalClasses))
-        self._maxAbsences = State(initialValue: Int(course.maxAbsences))
-        self._isNotificationEnabled = State(initialValue: course.isNotificationEnabled)
-    }
-    
-    var body: some View {
-        Form {
-            Section("授業情報") {
-                TextField("授業名", text: $courseName)
-                    .inputFieldStyle()
-                
-                HStack {
-                    Text("曜日・時限")
-                    Spacer()
-                    Text("\(dayName)曜日 \(course.period)限")
-                        .foregroundColor(.secondary)
-                }
-            }
-            
-            Section("授業設定") {
-                Stepper("総授業回数: \(totalClasses)回", value: $totalClasses, in: 1...30)
-                
-                Stepper("最大欠席可能: \(maxAbsences)回", value: $maxAbsences, in: 1...15)
-                
-                Toggle("通知を有効にする", isOn: $isNotificationEnabled)
-            }
-            
-            Section("出席状況") {
-                HStack {
-                    Text("現在の欠席回数")
-                    Spacer()
-                    Text("\(viewModel.getAbsenceCount(for: course))回")
-                        .foregroundColor(.red)
-                }
-                
-                HStack {
-                    Text("残り欠席可能回数")
-                    Spacer()
-                    Text("\(viewModel.getRemainingAbsences(for: course))回")
-                        .foregroundColor(viewModel.getStatusColor(for: course))
-                }
-            }
-        }
-        .navigationTitle("授業編集")
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .navigationBarTrailing) {
-                Button("保存") {
-                    saveChanges()
-                    dismiss()
-                }
-            }
-        }
-    }
-    
-    private var dayName: String {
-        let days = ["", "月", "火", "水", "木", "金", "土", "日"]
-        let index = Int(course.dayOfWeek)
-        return index > 0 && index < days.count ? days[index] : ""
-    }
-    
-    private func saveChanges() {
-        course.courseName = courseName
-        course.totalClasses = Int16(totalClasses)
-        course.maxAbsences = Int16(maxAbsences)
-        course.isNotificationEnabled = isNotificationEnabled
-        
-        viewModel.save()
-    }
-}
 
 // MARK: - 強化された設定ビュー群
 
@@ -736,6 +536,118 @@ struct SupportView: View {
             }
         }
         .navigationTitle("サポート")
+    }
+}
+
+// MARK: - 学期別リセットビュー
+struct SemesterResetView: View {
+    @ObservedObject var viewModel: AttendanceViewModel
+    @Environment(\.dismiss) private var dismiss
+    
+    @State private var selectedSemester: Semester?
+    @State private var showingResetAlert = false
+    
+    var body: some View {
+        List {
+            Section {
+                Text("リセットしたい学期を選択してください。選択した学期の時間割と欠席記録がすべて削除されます。")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+                    .padding(.vertical, 8)
+            }
+            
+            Section("学期一覧") {
+                ForEach(viewModel.availableSemesters, id: \.semesterId) { semester in
+                    SemesterSelectionRow(
+                        semester: semester,
+                        isSelected: selectedSemester?.semesterId == semester.semesterId,
+                        viewModel: viewModel
+                    ) {
+                        selectedSemester = semester
+                    }
+                }
+            }
+        }
+        .navigationTitle("学期別リセット")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button("リセット") {
+                    showingResetAlert = true
+                }
+                .foregroundColor(.red)
+                .disabled(selectedSemester == nil)
+            }
+        }
+        .alert("学期リセットの確認", isPresented: $showingResetAlert) {
+            Button("リセット", role: .destructive) {
+                if let semester = selectedSemester {
+                    viewModel.resetSemesterTimetable(for: semester)
+                    dismiss()
+                }
+            }
+            Button("キャンセル", role: .cancel) {}
+        } message: {
+            if let semester = selectedSemester {
+                Text("\(semester.name ?? "")の時間割と欠席記録をすべて削除します。この操作は取り消せません。")
+            }
+        }
+    }
+}
+
+struct SemesterSelectionRow: View {
+    let semester: Semester
+    let isSelected: Bool
+    @ObservedObject var viewModel: AttendanceViewModel
+    let onTap: () -> Void
+    
+    var body: some View {
+        Button(action: onTap) {
+            HStack {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(semester.name ?? "")
+                        .font(.headline)
+                        .foregroundColor(.primary)
+                    
+                    HStack {
+                        Text("開始: \(formatDate(semester.startDate))")
+                        Text("終了: \(formatDate(semester.endDate))")
+                    }
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    
+                    Text("授業数: \(getCourseCount(for: semester))件")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+                
+                Spacer()
+                
+                if isSelected {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundColor(.blue)
+                } else {
+                    Image(systemName: "circle")
+                        .foregroundColor(.gray)
+                }
+            }
+            .padding(.vertical, 4)
+        }
+        .buttonStyle(PlainButtonStyle())
+    }
+    
+    private func formatDate(_ date: Date?) -> String {
+        guard let date = date else { return "-" }
+        let formatter = DateFormatter()
+        formatter.dateFormat = "M/d"
+        return formatter.string(from: date)
+    }
+    
+    private func getCourseCount(for semester: Semester) -> Int {
+        let request: NSFetchRequest<Course> = Course.fetchRequest()
+        request.predicate = NSPredicate(format: "semester == %@", semester)
+        
+        return (try? viewModel.managedObjectContext.count(for: request)) ?? 0
     }
 }
 

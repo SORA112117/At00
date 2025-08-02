@@ -10,7 +10,6 @@ import CoreData
 
 struct TimetableView: View {
     @StateObject private var viewModel = AttendanceViewModel()
-    @State private var showingCourseDetail = false
     @State private var selectedCourse: Course?
     @State private var showingAddCourse = false
     @State private var selectedTimeSlot: (day: Int, period: Int)?
@@ -65,11 +64,6 @@ struct TimetableView: View {
                     Button("設定") {
                         // 設定画面を表示
                     }
-                }
-            }
-            .sheet(isPresented: $showingCourseDetail) {
-                if let course = selectedCourse {
-                    CourseDetailView(course: course, viewModel: viewModel)
                 }
             }
             .sheet(isPresented: $showingAddCourse, onDismiss: {
@@ -235,6 +229,7 @@ struct TimetableView: View {
                 },
                 onLongPress: {
                     if let course = course {
+                        print("Long press detected for course: \(course.courseName ?? "Unknown")")
                         selectedCourse = course
                         showingCourseEditDetail = true
                     }
@@ -331,7 +326,8 @@ struct EnhancedCourseCell: View {
     @State private var previousCount = 0
     
     var body: some View {
-        Button(action: onTap) {
+        // Buttonのactionを削除してジェスチャーのみで処理（ダブルカウント防止）
+        Button(action: {}) {
             VStack(spacing: 0) {
                 if let course = course {
                     // 上部：科目名（6文字まで2行表示）
@@ -345,40 +341,28 @@ struct EnhancedCourseCell: View {
                         .padding(.horizontal, 2)
                     
                     // 中央：欠席数（大きなフォント）
-                    ZStack {
-                        Text("\(absenceCount)")
-                            .font(.system(size: 22, weight: .bold))
-                            .foregroundColor(.primary)
-                            .scaleEffect(showingCountAnimation ? 1.2 : 1.0)
-                            .animation(.spring(response: 0.3, dampingFraction: 0.6), value: absenceCount)
-                            .animation(.spring(response: 0.2, dampingFraction: 0.8), value: showingCountAnimation)
-                            .onChange(of: absenceCount) { oldValue, newValue in
-                                if newValue != previousCount {
-                                    withAnimation(.spring(response: 0.2, dampingFraction: 0.6)) {
-                                        showingCountAnimation = true
-                                    }
-                                    
-                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                                        withAnimation(.spring(response: 0.2, dampingFraction: 0.8)) {
-                                            showingCountAnimation = false
-                                        }
-                                    }
-                                    
-                                    previousCount = newValue
+                    Text("\(absenceCount)")
+                        .font(.system(size: 22, weight: .bold))
+                        .foregroundColor(.primary)
+                        .scaleEffect(showingCountAnimation ? 1.1 : 1.0)
+                        .animation(.spring(response: 0.25, dampingFraction: 0.8), value: showingCountAnimation)
+                        .onChange(of: absenceCount) { oldValue, newValue in
+                            if newValue != previousCount {
+                                // 最小限でスマートなカウントエフェクト
+                                withAnimation(.spring(response: 0.2, dampingFraction: 0.7)) {
+                                    showingCountAnimation = true
                                 }
+                                
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                                    withAnimation(.spring(response: 0.2, dampingFraction: 0.8)) {
+                                        showingCountAnimation = false
+                                    }
+                                }
+                                
+                                previousCount = newValue
                             }
-                        
-                        // カウントアップエフェクト
-                        if showingCountAnimation {
-                            Text("+1")
-                                .font(.system(size: 14, weight: .bold))
-                                .foregroundColor(.red)
-                                .offset(y: -15)
-                                .opacity(showingCountAnimation ? 0 : 1)
-                                .animation(.easeOut(duration: 0.5), value: showingCountAnimation)
                         }
-                    }
-                    .frame(height: 32)
+                        .frame(height: 32)
                     
                     // 下部：カラーボックス（数字の下に配置）
                     Spacer(minLength: 4) // カラーボックスの位置を少し下に
@@ -398,8 +382,6 @@ struct EnhancedCourseCell: View {
             .background(
                 RoundedRectangle(cornerRadius: 8)
                     .fill(course != nil ? Color(.systemBackground) : Color(.systemGray6))
-                    .scaleEffect(isPressed ? 0.95 : 1.0)
-                    .animation(.easeInOut(duration: 0.1), value: isPressed)
                     .overlay(
                         // 左辺全体にカラーライン
                         HStack {
@@ -419,35 +401,42 @@ struct EnhancedCourseCell: View {
                             Spacer()
                         }
                     )
-                    .overlay(
-                        // タップ時のオーバーレイエフェクト
-                        RoundedRectangle(cornerRadius: 8)
-                            .fill(Color.black.opacity(isPressed ? 0.1 : 0))
-                            .animation(.easeInOut(duration: 0.1), value: isPressed)
-                    )
             )
+            .scaleEffect(isPressed ? 1.05 : 1.0)
+            .animation(.spring(response: 0.15, dampingFraction: 0.7), value: isPressed)
         }
         .buttonStyle(PlainButtonStyle())
-        .interactiveButton(isPressed: isPressed, isLongPressing: isLongPressing)
-        .onLongPressGesture {
-            if course != nil {
-                onLongPress()
-            }
-        }
-        .onTapGesture {
-            // タップエフェクト
-            withAnimation(.easeInOut(duration: 0.1)) {
-                isPressed = true
-            }
-            
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                withAnimation(.easeInOut(duration: 0.1)) {
-                    isPressed = false
+        .simultaneousGesture(
+            LongPressGesture(minimumDuration: 0.8)
+                .onEnded { _ in
+                    if course != nil {
+                        print("EnhancedCourseCell: Long press gesture triggered")
+                        // 長押しフィードバック
+                        let impactFeedback = UIImpactFeedbackGenerator(style: .medium)
+                        impactFeedback.impactOccurred()
+                        
+                        onLongPress()
+                    }
                 }
-            }
-            
-            onTap()
-        }
+        )
+        .simultaneousGesture(
+            TapGesture()
+                .onEnded {
+                    // タップエフェクト
+                    withAnimation(.easeInOut(duration: 0.1)) {
+                        isPressed = true
+                    }
+                    
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                        withAnimation(.easeInOut(duration: 0.1)) {
+                            isPressed = false
+                        }
+                    }
+                    
+                    // タップ処理を実行
+                    onTap()
+                }
+        )
     }
     
     private func getCourseColor(_ course: Course) -> Color {
