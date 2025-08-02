@@ -21,115 +21,108 @@ struct SinglePeriodEditView: View {
     
     var body: some View {
         NavigationView {
-            VStack(spacing: 32) {
-                // ヘッダー
-                VStack(spacing: 12) {
+            VStack(spacing: 20) {
+                // コンパクトヘッダー
+                HStack(spacing: 16) {
                     ZStack {
                         Circle()
-                            .fill(Color.blue.opacity(0.1))
-                            .frame(width: 80, height: 80)
+                            .fill(Color.blue)
+                            .frame(width: 50, height: 50)
                         
                         Text("\(period)")
-                            .font(.system(size: 36, weight: .bold))
+                            .font(.system(size: 20, weight: .bold))
+                            .foregroundColor(.white)
+                    }
+                    
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("\(periods[period - 1])")
+                            .font(.title3)
+                            .fontWeight(.semibold)
+                        
+                        Text("\(formatTime(startTime)) - \(formatTime(endTime))")
+                            .font(.subheadline)
                             .foregroundColor(.blue)
+                            .fontWeight(.medium)
                     }
                     
-                    Text("\(periods[period - 1])の時間設定")
-                        .font(.title2)
-                        .fontWeight(.semibold)
-                }
-                .padding(.top, 20)
-                
-                // 時間設定セクション
-                VStack(spacing: 24) {
-                    // 開始時刻
-                    VStack(alignment: .leading, spacing: 12) {
-                        Label("開始時刻", systemImage: "clock")
-                            .font(.headline)
-                            .foregroundColor(.primary)
-                        
-                        HStack {
-                            Spacer()
-                            
-                            DatePicker(
-                                "",
-                                selection: $startTime,
-                                displayedComponents: .hourAndMinute
-                            )
-                            .datePickerStyle(.wheel)
-                            .labelsHidden()
-                            .frame(width: 200, height: 100)
-                            
-                            Spacer()
-                        }
-                        .padding()
-                        .background(
-                            RoundedRectangle(cornerRadius: 16)
-                                .fill(Color(.systemGray6))
-                        )
-                    }
-                    
-                    // 矢印
-                    Image(systemName: "arrow.down")
-                        .font(.title2)
-                        .foregroundColor(.secondary)
-                    
-                    // 終了時刻
-                    VStack(alignment: .leading, spacing: 12) {
-                        Label("終了時刻", systemImage: "clock.badge.checkmark")
-                            .font(.headline)
-                            .foregroundColor(.primary)
-                        
-                        HStack {
-                            Spacer()
-                            
-                            DatePicker(
-                                "",
-                                selection: $endTime,
-                                displayedComponents: .hourAndMinute
-                            )
-                            .datePickerStyle(.wheel)
-                            .labelsHidden()
-                            .frame(width: 200, height: 100)
-                            
-                            Spacer()
-                        }
-                        .padding()
-                        .background(
-                            RoundedRectangle(cornerRadius: 16)
-                                .fill(Color(.systemGray6))
-                        )
-                    }
-                }
-                .padding(.horizontal)
-                
-                Spacer()
-                
-                // 授業時間表示
-                VStack(spacing: 8) {
-                    Text("授業時間")
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
-                    
-                    Text("\(formatTime(startTime)) - \(formatTime(endTime))")
-                        .font(.title3)
-                        .fontWeight(.semibold)
-                        .foregroundColor(.primary)
+                    Spacer()
                     
                     if let duration = calculateDuration() {
-                        Text("(\(duration)分)")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
+                        VStack {
+                            Text("\(duration)")
+                                .font(.title2)
+                                .fontWeight(.bold)
+                                .foregroundColor(.primary)
+                            Text("分")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
                     }
                 }
                 .padding()
-                .frame(maxWidth: .infinity)
                 .background(
-                    RoundedRectangle(cornerRadius: 12)
-                        .fill(Color(.systemBackground))
-                        .shadow(color: .black.opacity(0.05), radius: 4, x: 0, y: 2)
+                    RoundedRectangle(cornerRadius: 16)
+                        .fill(Color(.systemGray6))
                 )
                 .padding(.horizontal)
+                
+                // スマートタイムピッカー
+                VStack(spacing: 16) {
+                    // 開始時刻
+                    VStack(spacing: 8) {
+                        HStack {
+                            Image(systemName: "play.circle.fill")
+                                .foregroundColor(.green)
+                            Text("開始")
+                                .font(.subheadline)
+                                .fontWeight(.medium)
+                            Spacer()
+                            Text(formatTime(startTime))
+                                .font(.title3)
+                                .fontWeight(.semibold)
+                                .foregroundColor(.green)
+                        }
+                        
+                        CustomTimePicker(
+                            selection: $startTime,
+                            minuteInterval: 5
+                        )
+                        .frame(height: 120)
+                    }
+                    
+                    Divider()
+                    
+                    // 終了時刻
+                    VStack(spacing: 8) {
+                        HStack {
+                            Image(systemName: "stop.circle.fill")
+                                .foregroundColor(.red)
+                            Text("終了")
+                                .font(.subheadline)
+                                .fontWeight(.medium)
+                            Spacer()
+                            Text(formatTime(endTime))
+                                .font(.title3)
+                                .fontWeight(.semibold)
+                                .foregroundColor(.red)
+                        }
+                        
+                        CustomTimePicker(
+                            selection: $endTime,
+                            minuteInterval: 5
+                        )
+                        .frame(height: 120)
+                    }
+                }
+                .padding()
+                .background(
+                    RoundedRectangle(cornerRadius: 16)
+                        .fill(Color(.systemBackground))
+                        .shadow(color: .black.opacity(0.05), radius: 8, x: 0, y: 4)
+                )
+                .padding(.horizontal)
+                
+                Spacer()
             }
             .navigationTitle("\(periods[period - 1])編集")
             .navigationBarTitleDisplayMode(.inline)
@@ -235,6 +228,92 @@ struct SinglePeriodEditView: View {
         periodTime.endTime = endTime
         
         try? context.save()
+    }
+}
+
+struct CustomTimePicker: View {
+    @Binding var selection: Date
+    let minuteInterval: Int
+    
+    @State private var selectedHour: Int = 9
+    @State private var selectedMinute: Int = 0
+    
+    private let hours = Array(6...23) // 6:00 - 23:00
+    private var minutes: [Int] {
+        stride(from: 0, to: 60, by: minuteInterval).map { $0 }
+    }
+    
+    var body: some View {
+        HStack(spacing: 0) {
+            // 時間ピッカー
+            Picker("時", selection: $selectedHour) {
+                ForEach(hours, id: \.self) { hour in
+                    Text("\(hour)")
+                        .font(.title2)
+                        .fontWeight(.medium)
+                        .tag(hour)
+                }
+            }
+            .pickerStyle(.wheel)
+            .frame(width: 80)
+            .clipped()
+            
+            Text(":")
+                .font(.title2)
+                .fontWeight(.bold)
+                .foregroundColor(.secondary)
+            
+            // 分ピッカー
+            Picker("分", selection: $selectedMinute) {
+                ForEach(minutes, id: \.self) { minute in
+                    Text(String(format: "%02d", minute))
+                        .font(.title2)
+                        .fontWeight(.medium)
+                        .tag(minute)
+                }
+            }
+            .pickerStyle(.wheel)
+            .frame(width: 80)
+            .clipped()
+        }
+        .onChange(of: selectedHour) { _, newHour in
+            updateSelection()
+        }
+        .onChange(of: selectedMinute) { _, newMinute in
+            updateSelection()
+        }
+        .onChange(of: selection) { _, newDate in
+            updateFromDate(newDate)
+        }
+        .onAppear {
+            updateFromDate(selection)
+        }
+    }
+    
+    private func updateSelection() {
+        let calendar = Calendar.current
+        let components = DateComponents(hour: selectedHour, minute: selectedMinute)
+        if let newDate = calendar.date(from: components) {
+            selection = newDate
+        }
+    }
+    
+    private func updateFromDate(_ date: Date) {
+        let calendar = Calendar.current
+        selectedHour = calendar.component(.hour, from: date)
+        let minute = calendar.component(.minute, from: date)
+        
+        // 最も近い5分刻みの値に調整
+        let roundedMinute = (minute / minuteInterval) * minuteInterval
+        selectedMinute = roundedMinute
+        
+        // 調整後の時間で選択を更新
+        let components = DateComponents(hour: selectedHour, minute: roundedMinute)
+        if let adjustedDate = calendar.date(from: components) {
+            DispatchQueue.main.async {
+                selection = adjustedDate
+            }
+        }
     }
 }
 
