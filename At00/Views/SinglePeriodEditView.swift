@@ -26,29 +26,30 @@ struct SinglePeriodEditView: View {
                 HStack(spacing: 16) {
                     ZStack {
                         Circle()
-                            .fill(Color.blue)
+                            .fill(Color.primary)
                             .frame(width: 50, height: 50)
                         
                         Text("\(period)")
                             .font(.system(size: 20, weight: .bold))
-                            .foregroundColor(.white)
+                            .foregroundColor(Color(.systemBackground))
                     }
                     
                     VStack(alignment: .leading, spacing: 2) {
                         Text("\(periods[period - 1])")
                             .font(.title3)
                             .fontWeight(.semibold)
+                            .foregroundColor(.primary)
                         
                         Text("\(formatTime(startTime)) - \(formatTime(endTime))")
                             .font(.subheadline)
-                            .foregroundColor(.blue)
+                            .foregroundColor(.secondary)
                             .fontWeight(.medium)
                     }
                     
                     Spacer()
                     
                     if let duration = calculateDuration() {
-                        VStack {
+                        VStack(alignment: .trailing, spacing: 2) {
                             Text("\(duration)")
                                 .font(.title2)
                                 .fontWeight(.bold)
@@ -67,20 +68,22 @@ struct SinglePeriodEditView: View {
                 .padding(.horizontal)
                 
                 // スマートタイムピッカー
-                VStack(spacing: 16) {
+                VStack(spacing: 24) {
                     // 開始時刻
-                    VStack(spacing: 8) {
+                    VStack(spacing: 12) {
                         HStack {
-                            Image(systemName: "play.circle.fill")
-                                .foregroundColor(.green)
-                            Text("開始")
+                            Image(systemName: "clock")
+                                .foregroundColor(.primary)
+                                .font(.system(size: 16, weight: .medium))
+                            Text("開始時刻")
                                 .font(.subheadline)
                                 .fontWeight(.medium)
+                                .foregroundColor(.primary)
                             Spacer()
                             Text(formatTime(startTime))
                                 .font(.title3)
                                 .fontWeight(.semibold)
-                                .foregroundColor(.green)
+                                .foregroundColor(.primary)
                         }
                         
                         CustomTimePicker(
@@ -91,20 +94,23 @@ struct SinglePeriodEditView: View {
                     }
                     
                     Divider()
+                        .background(Color(.systemGray4))
                     
                     // 終了時刻
-                    VStack(spacing: 8) {
+                    VStack(spacing: 12) {
                         HStack {
-                            Image(systemName: "stop.circle.fill")
-                                .foregroundColor(.red)
-                            Text("終了")
+                            Image(systemName: "clock")
+                                .foregroundColor(.primary)
+                                .font(.system(size: 16, weight: .medium))
+                            Text("終了時刻")
                                 .font(.subheadline)
                                 .fontWeight(.medium)
+                                .foregroundColor(.primary)
                             Spacer()
                             Text(formatTime(endTime))
                                 .font(.title3)
                                 .fontWeight(.semibold)
-                                .foregroundColor(.red)
+                                .foregroundColor(.primary)
                         }
                         
                         CustomTimePicker(
@@ -261,7 +267,7 @@ struct CustomTimePicker: View {
             Text(":")
                 .font(.title2)
                 .fontWeight(.bold)
-                .foregroundColor(.secondary)
+                .foregroundColor(.primary)
             
             // 分ピッカー
             Picker("分", selection: $selectedMinute) {
