@@ -93,6 +93,12 @@ struct TimetableView: View {
             .sheet(isPresented: $showingPeriodTimeSettings) {
                 PeriodTimeSettingsView()
             }
+            .onChange(of: showingPeriodTimeSettings) { _, isShowing in
+                if !isShowing {
+                    // 設定画面が閉じられたときに時間を再読み込み
+                    loadTimeSlots()
+                }
+            }
             .sheet(isPresented: $showingCourseEditDetail) {
                 if let course = selectedCourse {
                     EditCourseDetailView(course: course, viewModel: viewModel)
@@ -100,6 +106,14 @@ struct TimetableView: View {
             }
         }
         .onAppear {
+            loadTimeSlots()
+        }
+        .onChange(of: viewModel.currentSemester?.semesterId) { _, _ in
+            // 学期が変更されたときも時間を再読み込み
+            loadTimeSlots()
+        }
+        .task {
+            // タブ切り替え時にも確実に更新
             loadTimeSlots()
         }
     }
@@ -252,15 +266,27 @@ struct TimetableView: View {
         
         let periodTimes = (try? viewModel.managedObjectContext.fetch(request)) ?? []
         
+        // デフォルトの時間を保持
+        var updatedSlots = ["9:00-10:30", "10:40-12:10", "13:00-14:30", "14:40-16:10", "16:20-17:50"]
+        
         if !periodTimes.isEmpty {
             let formatter = DateFormatter()
             formatter.dateFormat = "HH:mm"
             
-            timeSlots = periodTimes.map { periodTime in
-                let startText = formatter.string(from: periodTime.startTime ?? Date())
-                let endText = formatter.string(from: periodTime.endTime ?? Date())
-                return "\(startText)-\(endText)"
+            // 各時限の時間を更新
+            for periodTime in periodTimes {
+                let period = Int(periodTime.period)
+                if period >= 1 && period <= 5 {
+                    let startText = formatter.string(from: periodTime.startTime ?? Date())
+                    let endText = formatter.string(from: periodTime.endTime ?? Date())
+                    updatedSlots[period - 1] = "\(startText)-\(endText)"
+                }
             }
+        }
+        
+        // UIの更新を確実にするためにメインスレッドで実行
+        DispatchQueue.main.async {
+            self.timeSlots = updatedSlots
         }
     }
 }
