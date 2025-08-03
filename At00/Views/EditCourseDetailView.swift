@@ -17,7 +17,6 @@ struct EditCourseDetailView: View {
     @State private var totalClasses: Int
     @State private var maxAbsences: Int
     @State private var selectedColorIndex: Int
-    @State private var isFullYear: Bool
     @State private var absenceRecords: [AttendanceRecord] = []
     @State private var tempAddedRecords: [TempAbsenceRecord] = [] // 一時的に追加された記録
     @State private var deletedRecords: Set<AttendanceRecord> = [] // 削除予定の記録
@@ -39,7 +38,6 @@ struct EditCourseDetailView: View {
         self._totalClasses = State(initialValue: Int(course.totalClasses))
         self._maxAbsences = State(initialValue: Int(course.maxAbsences))
         self._selectedColorIndex = State(initialValue: Int(course.colorIndex))
-        self._isFullYear = State(initialValue: course.isFullYear)
     }
     
     private let dayNames = ["", "月", "火", "水", "木", "金", "土", "日"]
@@ -193,10 +191,6 @@ struct EditCourseDetailView: View {
                 Divider()
                     .padding(.leading, 12)
                 
-                settingRow(title: "通年科目", value: isFullYear ? "はい" : "いいえ") {
-                    EmptyView()
-                }
-                .foregroundColor(.secondary)
             }
         }
         .padding(16)
@@ -436,50 +430,6 @@ struct EditCourseDetailView: View {
     }
     
     
-    // 通年科目の自動配置処理
-    private func handleFullYearCourseCreation() {
-        guard let currentSemester = viewModel.currentSemester else { return }
-        
-        // 現在の学期タイプを確認
-        let currentType = SemesterType(rawValue: currentSemester.semesterType ?? "") ?? .firstHalf
-        let otherType: SemesterType = (currentType == .firstHalf) ? .secondHalf : .firstHalf
-        
-        // もう一方の学期を取得
-        guard let otherSemester = viewModel.availableSemesters.first(where: { 
-            $0.semesterType == otherType.rawValue 
-        }) else { return }
-        
-        // 同名の授業が既に存在するかチェック
-        let courseRequest: NSFetchRequest<Course> = Course.fetchRequest()
-        courseRequest.predicate = NSPredicate(
-            format: "courseName == %@ AND semester == %@ AND dayOfWeek == %@ AND period == %@",
-            courseName,
-            otherSemester,
-            course.dayOfWeek,
-            course.period
-        )
-        
-        do {
-            let existingCourses = try viewModel.managedObjectContext.fetch(courseRequest)
-            if existingCourses.isEmpty {
-                // 他方の学期に同じ授業を作成
-                let otherCourse = Course(context: viewModel.managedObjectContext)
-                otherCourse.courseId = UUID()
-                otherCourse.courseName = courseName
-                otherCourse.dayOfWeek = course.dayOfWeek
-                otherCourse.period = course.period
-                otherCourse.totalClasses = Int16(totalClasses)
-                otherCourse.maxAbsences = Int16(maxAbsences)
-                otherCourse.semester = otherSemester
-                otherCourse.isNotificationEnabled = course.isNotificationEnabled
-                otherCourse.isFullYear = true
-                otherCourse.colorIndex = Int16(selectedColorIndex)
-            }
-        } catch {
-            print("通年科目の自動配置エラー: \(error)")
-        }
-    }
-    
     private func formatDate(_ date: Date) -> String {
         let formatter = DateFormatter()
         formatter.dateFormat = "M月d日(E)"
@@ -544,7 +494,6 @@ struct EditCourseDetailView: View {
         totalClasses = Int(course.totalClasses)
         maxAbsences = Int(course.maxAbsences)
         selectedColorIndex = Int(course.colorIndex)
-        isFullYear = course.isFullYear
     }
     
     private func addAbsenceRecord() {
@@ -595,7 +544,6 @@ struct EditCourseDetailView: View {
                     sameCourse.totalClasses = Int16(totalClasses)
                     sameCourse.maxAbsences = Int16(maxAbsences)
                     sameCourse.colorIndex = Int16(selectedColorIndex)
-                    sameCourse.isFullYear = isFullYear
                 }
             } catch {
                 print("同名授業の更新エラー: \(error)")
@@ -606,15 +554,10 @@ struct EditCourseDetailView: View {
             course.totalClasses = Int16(totalClasses)
             course.maxAbsences = Int16(maxAbsences)
             course.colorIndex = Int16(selectedColorIndex)
-            course.isFullYear = isFullYear
         }
         
-        // 4. 通年科目の場合、もう一方の学期にも自動配置
-        if isFullYear {
-            handleFullYearCourseCreation()
-        }
         
-        // 5. 一時的な変更をクリア
+        // 3. 一時的な変更をクリア
         deletedRecords.removeAll()
         tempAddedRecords.removeAll()
         

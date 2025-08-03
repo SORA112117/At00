@@ -23,7 +23,6 @@ struct CourseSelectionView: View {
     @State private var newCourseName = ""
     @State private var newTotalClasses = 15
     @State private var newMaxAbsences = 5
-    @State private var newIsFullYear = false
     @State private var newSelectedColorIndex = 0
     
     enum CourseSelectionTab: String, CaseIterable {
@@ -73,7 +72,6 @@ struct CourseSelectionView: View {
                             courseName: $newCourseName,
                             totalClasses: $newTotalClasses,
                             maxAbsences: $newMaxAbsences,
-                            isFullYear: $newIsFullYear,
                             selectedColorIndex: $newSelectedColorIndex
                         )
                         .transition(.asymmetric(insertion: .move(edge: .leading), removal: .move(edge: .trailing)))
@@ -153,39 +151,10 @@ struct CourseSelectionView: View {
         let currentSemesterRequest: NSFetchRequest<Course> = Course.fetchRequest()
         currentSemesterRequest.predicate = NSPredicate(format: "semester == %@", semester)
         
-        // 2. 通年科目の継承のため、他学期の通年科目も取得
-        let fullYearRequest: NSFetchRequest<Course> = Course.fetchRequest()
-        fullYearRequest.predicate = NSPredicate(format: "isFullYear == YES")
-        
         let currentSemesterCourses = (try? viewModel.managedObjectContext.fetch(currentSemesterRequest)) ?? []
-        let fullYearCourses = (try? viewModel.managedObjectContext.fetch(fullYearRequest)) ?? []
         
-        // 3. 全ての授業を統合（重複排除）
-        var allCourses: [Course] = []
-        var processedCourseNames = Set<String>()
-        
-        // 現在の学期の授業を優先
-        for course in currentSemesterCourses {
-            if let courseName = course.courseName, !courseName.isEmpty {
-                if !processedCourseNames.contains(courseName) {
-                    allCourses.append(course)
-                    processedCourseNames.insert(courseName)
-                }
-            }
-        }
-        
-        // 通年科目で、現在の学期にまだ存在しないものを追加
-        for course in fullYearCourses {
-            if let courseName = course.courseName,
-               !courseName.isEmpty,
-               !processedCourseNames.contains(courseName) {
-                allCourses.append(course)
-                processedCourseNames.insert(courseName)
-            }
-        }
-        
-        // 4. 現在の位置に既に配置されていない授業のみを表示
-        availableExistingCourses = allCourses.compactMap { course in
+        // 2. 現在の位置に既に配置されていない授業のみを表示
+        availableExistingCourses = currentSemesterCourses.compactMap { course in
             guard let courseName = course.courseName,
                   !courseName.isEmpty,
                   !(course.dayOfWeek == dayOfWeek && course.period == period) else {
@@ -195,7 +164,7 @@ struct CourseSelectionView: View {
             return course
         }
         
-        // 5. 授業名でソート
+        // 3. 授業名でソート
         availableExistingCourses.sort { course1, course2 in
             let name1 = course1.courseName ?? ""
             let name2 = course2.courseName ?? ""
@@ -215,7 +184,6 @@ struct CourseSelectionView: View {
             dayOfWeek: dayOfWeek,
             period: period,
             totalClasses: newTotalClasses,
-            isFullYear: newIsFullYear,
             colorIndex: newSelectedColorIndex
         )
         
@@ -224,10 +192,6 @@ struct CourseSelectionView: View {
             print("新規授業作成成功: \(newCourseName)")
         case .currentSlotOccupied:
             print("新規授業作成失敗（現在のスロット占有）: \(newCourseName)")
-        case .otherSemesterSlotOccupied:
-            print("新規授業作成失敗（他学期スロット占有）: \(newCourseName)")
-        case .bothSlotsOccupied:
-            print("新規授業作成失敗（両方のスロット占有）: \(newCourseName)")
         }
         
         // 即座に時間割を再読み込み
@@ -357,30 +321,6 @@ struct SimpleExistingCourseCard: View {
                             .foregroundColor(.secondary)
                             .clipShape(Capsule())
                         
-                        if course.isFullYear {
-                            // 他学期の通年科目か現在学期の通年科目かを区別
-                            let isFromOtherSemester = course.semester != viewModel.currentSemester
-                            
-                            HStack(spacing: 4) {
-                                Text("通年")
-                                    .font(.caption)
-                                    .padding(.horizontal, 6)
-                                    .padding(.vertical, 2)
-                                    .background(Color.purple.opacity(0.1))
-                                    .foregroundColor(.purple)
-                                    .clipShape(Capsule())
-                                
-                                if isFromOtherSemester {
-                                    Text("データ継承")
-                                        .font(.caption2)
-                                        .padding(.horizontal, 4)
-                                        .padding(.vertical, 1)
-                                        .background(Color.blue.opacity(0.1))
-                                        .foregroundColor(.blue)
-                                        .clipShape(Capsule())
-                                }
-                            }
-                        }
                     }
                 }
                 
@@ -406,7 +346,6 @@ struct NewCourseCreationView: View {
     @Binding var courseName: String
     @Binding var totalClasses: Int
     @Binding var maxAbsences: Int
-    @Binding var isFullYear: Bool
     @Binding var selectedColorIndex: Int
     
     private let dayNames = ["", "月", "火", "水", "木", "金", "土", "日"]
@@ -460,11 +399,6 @@ struct NewCourseCreationView: View {
                         
                         Divider()
                         
-                        HStack {
-                            Text("通年科目")
-                            Spacer()
-                            Toggle("", isOn: $isFullYear)
-                        }
                     }
                 }
                 .padding()
@@ -475,15 +409,6 @@ struct NewCourseCreationView: View {
                 )
                 .onChange(of: totalClasses) { _, newValue in
                     maxAbsences = max(1, newValue / 3)
-                }
-                .onChange(of: isFullYear) { _, newValue in
-                    if newValue {
-                        totalClasses = 30
-                        maxAbsences = 10
-                    } else {
-                        totalClasses = 15
-                        maxAbsences = 5
-                    }
                 }
                 
                 // カラー選択

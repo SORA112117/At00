@@ -340,18 +340,8 @@ class AttendanceViewModel: ObservableObject {
                 return 
             }
             
-            // 削除前に関連データを保存
-            let deletedCourse = latestRecord.course
-            let wasFullYear = deletedCourse?.isFullYear ?? false
-            let recordDate = latestRecord.date
-            
             // 記録を削除
             context.delete(latestRecord)
-            
-            // 通年科目の場合、ペア学期の同じ日付の記録も削除
-            if wasFullYear, let deletedCourse = deletedCourse, let recordDate = recordDate {
-                deletePairSemesterRecord(course: deletedCourse, date: recordDate)
-            }
             
             // Core Dataの保存を安全に実行
             do {
@@ -535,12 +525,10 @@ class AttendanceViewModel: ObservableObject {
     enum AddCourseResult {
         case success
         case currentSlotOccupied
-        case otherSemesterSlotOccupied
-        case bothSlotsOccupied
     }
     
     // 新しい授業を追加
-    func addCourse(name: String, dayOfWeek: Int, period: Int, totalClasses: Int = 15, isFullYear: Bool = false, colorIndex: Int = 0) -> AddCourseResult {
+    func addCourse(name: String, dayOfWeek: Int, period: Int, totalClasses: Int = 15, colorIndex: Int = 0) -> AddCourseResult {
         guard let semester = currentSemester else { return .currentSlotOccupied }
         
         // 現在の学期の指定位置に既に授業があるかチェック
@@ -548,15 +536,6 @@ class AttendanceViewModel: ObservableObject {
             return .currentSlotOccupied
         }
         
-        // 通年科目の場合、もう一方の学期の同じ位置もチェック
-        if isFullYear {
-            let otherType: SemesterType = (currentSemesterType == .firstHalf) ? .secondHalf : .firstHalf
-            if let otherSemester = availableSemesters.first(where: { $0.semesterType == otherType.rawValue }) {
-                if hasCourseBySemesterAndPosition(semester: otherSemester, dayOfWeek: dayOfWeek, period: period) {
-                    return .otherSemesterSlotOccupied
-                }
-            }
-        }
         
         // 現在の学期に授業を追加
         let course = Course(context: context)
@@ -568,34 +547,12 @@ class AttendanceViewModel: ObservableObject {
         course.maxAbsences = Int16(totalClasses / 3) // デフォルト: 1/3まで欠席可能
         course.semester = semester
         course.isNotificationEnabled = true
-        course.isFullYear = isFullYear
         course.colorIndex = Int16(colorIndex)
         
-        // 通年科目の場合、もう一方の学期にも同じ授業を追加
-        if isFullYear {
-            let otherType: SemesterType = (currentSemesterType == .firstHalf) ? .secondHalf : .firstHalf
-            if let otherSemester = availableSemesters.first(where: { $0.semesterType == otherType.rawValue }) {
-                let otherCourse = Course(context: context)
-                otherCourse.courseId = UUID()
-                otherCourse.courseName = name
-                otherCourse.dayOfWeek = Int16(dayOfWeek)
-                otherCourse.period = Int16(period)
-                otherCourse.totalClasses = Int16(totalClasses)
-                otherCourse.maxAbsences = Int16(totalClasses / 3)
-                otherCourse.semester = otherSemester
-                otherCourse.isNotificationEnabled = true
-                otherCourse.isFullYear = isFullYear
-                otherCourse.colorIndex = Int16(colorIndex)
-            }
-        }
         
         saveContext()
         loadTimetable()
         
-        // 通年科目の場合は同期を実行
-        if isFullYear {
-            syncFullYearCourses()
-        }
         
         // コースデータの更新を通知
         NotificationCenter.default.post(name: .courseDataDidChange, object: nil)
@@ -629,11 +586,6 @@ class AttendanceViewModel: ObservableObject {
     func assignExistingCourse(course: Course, newDayOfWeek: Int, newPeriod: Int) {
         guard let semester = currentSemester else { return }
         
-        // 通年科目で他学期から選択した場合の特別処理
-        if course.isFullYear && course.semester != semester {
-            assignFullYearCourseFromOtherSemester(course: course, newDayOfWeek: newDayOfWeek, newPeriod: newPeriod)
-            return
-        }
         
         // 既存の授業の複製を作成
         let newCourse = Course(context: context)
@@ -645,32 +597,11 @@ class AttendanceViewModel: ObservableObject {
         newCourse.maxAbsences = course.maxAbsences
         newCourse.semester = semester
         newCourse.isNotificationEnabled = course.isNotificationEnabled
-        newCourse.isFullYear = course.isFullYear
         newCourse.colorIndex = course.colorIndex
         
         // 注意: 欠席記録は代表的なCourse方式により、既存の記録をそのまま参照する
         // 新しい記録のコピーは作成しない（重複を避けるため）
         
-        // 通年科目の場合、もう一方の学期にも配置
-        if course.isFullYear {
-            let otherType: SemesterType = (currentSemesterType == .firstHalf) ? .secondHalf : .firstHalf
-            if let otherSemester = availableSemesters.first(where: { $0.semesterType == otherType.rawValue }) {
-                // 他学期に同じ位置の授業が既に存在するかチェック
-                if !hasExistingCourseInSlot(dayOfWeek: newDayOfWeek, period: newPeriod, semester: otherSemester) {
-                    let otherCourse = Course(context: context)
-                    otherCourse.courseId = UUID()
-                    otherCourse.courseName = course.courseName
-                    otherCourse.dayOfWeek = Int16(newDayOfWeek)
-                    otherCourse.period = Int16(newPeriod)
-                    otherCourse.totalClasses = course.totalClasses
-                    otherCourse.maxAbsences = course.maxAbsences
-                    otherCourse.semester = otherSemester
-                    otherCourse.isNotificationEnabled = course.isNotificationEnabled
-                    otherCourse.isFullYear = course.isFullYear
-                    otherCourse.colorIndex = course.colorIndex
-                }
-            }
-        }
         
         saveContext()
         loadTimetable()
@@ -680,65 +611,10 @@ class AttendanceViewModel: ObservableObject {
         NotificationCenter.default.post(name: .statisticsDataDidChange, object: nil)
     }
     
-    // 他学期の通年科目を現在の学期に配置する専用メソッド
-    private func assignFullYearCourseFromOtherSemester(course: Course, newDayOfWeek: Int, newPeriod: Int) {
-        guard let semester = currentSemester,
-              let courseName = course.courseName else { return }
-        
-        print("通年科目データ継承: \(courseName) を他学期から配置")
-        
-        // 現在の学期に新しい授業を作成（データは共有）
-        let newCourse = Course(context: context)
-        newCourse.courseId = UUID()
-        newCourse.courseName = courseName
-        newCourse.dayOfWeek = Int16(newDayOfWeek)
-        newCourse.period = Int16(newPeriod)
-        newCourse.totalClasses = course.totalClasses
-        newCourse.maxAbsences = course.maxAbsences
-        newCourse.semester = semester
-        newCourse.isNotificationEnabled = course.isNotificationEnabled
-        newCourse.isFullYear = true  // 必ず通年科目として設定
-        newCourse.colorIndex = course.colorIndex
-        
-        // 元の授業の設定も通年科目として確実に設定
-        course.isFullYear = true
-        
-        saveContext()
-        loadTimetable()
-        
-        // コースデータの更新を通知
-        NotificationCenter.default.post(name: .courseDataDidChange, object: nil)
-        NotificationCenter.default.post(name: .statisticsDataDidChange, object: nil)
-        
-        print("通年科目データ継承完了: \(courseName)")
-    }
     
-    // 指定された学期のスロットに授業が存在するかチェック
-    private func hasExistingCourseInSlot(dayOfWeek: Int, period: Int, semester: Semester) -> Bool {
-        let request: NSFetchRequest<Course> = Course.fetchRequest()
-        request.predicate = NSPredicate(
-            format: "semester == %@ AND dayOfWeek == %@ AND period == %@",
-            semester,
-            Int16(dayOfWeek),
-            Int16(period)
-        )
-        request.fetchLimit = 1
-        
-        do {
-            let existingCourses = try context.fetch(request)
-            return !existingCourses.isEmpty
-        } catch {
-            print("スロット占有チェックエラー: \(error)")
-            return false
-        }
-    }
     
     // 授業を削除（同名科目と関連データをすべて削除）
     func deleteCourse(_ course: Course) {
-        // 通年科目の場合は同期削除を実行
-        if course.isFullYear {
-            deleteFullYearCourseFromPair(course: course)
-        }
         
         // 単一のコースのみ削除（同名の他のコマは残す）
         context.delete(course)
@@ -1114,85 +990,7 @@ class AttendanceViewModel: ObservableObject {
         notificationManager.cancelAllNotifications()
     }
     
-    // MARK: - 通年科目同期機能
-    
-    /// 通年科目を同期（ペア学期間での科目追加・削除・更新）
-    func syncFullYearCourses() {
-        // 利用可能な全学期を取得
-        let allSemesters = availableSemesters
-        
-        // 年度別・学期タイプ別にグループ化
-        var semesterGroups: [Int: [SemesterType: Semester]] = [:]
-        
-        for semester in allSemesters {
-            guard let semesterTypeString = semester.semesterType,
-                  let semesterType = SemesterType(rawValue: semesterTypeString),
-                  let startDate = semester.startDate else {
-                continue
-            }
-            
-            let year = Calendar.current.component(.year, from: startDate)
-            
-            if semesterGroups[year] == nil {
-                semesterGroups[year] = [:]
-            }
-            semesterGroups[year]?[semesterType] = semester
-        }
-        
-        // 各年度のペアについて通年科目を同期
-        for (_, semesters) in semesterGroups {
-            guard let firstHalf = semesters[.firstHalf],
-                  let secondHalf = semesters[.secondHalf] else {
-                continue // ペアが揃っていない場合はスキップ
-            }
-            
-            syncFullYearCoursesForPair(firstHalf: firstHalf, secondHalf: secondHalf)
-        }
-    }
-    
-    /// ペア学期間での通年科目同期
-    private func syncFullYearCoursesForPair(firstHalf: Semester, secondHalf: Semester) {
-        // 前期の通年科目を取得
-        let firstHalfFullYearCourses = getFullYearCourses(for: firstHalf)
-        
-        // 後期の通年科目を取得
-        let secondHalfFullYearCourses = getFullYearCourses(for: secondHalf)
-        
-        var hasChanges = false
-        
-        // 前期の通年科目を後期に同期
-        for firstHalfCourse in firstHalfFullYearCourses {
-            if syncCourseToOtherSemester(course: firstHalfCourse, targetSemester: secondHalf) {
-                hasChanges = true
-            }
-        }
-        
-        // 後期の通年科目を前期に同期
-        for secondHalfCourse in secondHalfFullYearCourses {
-            if syncCourseToOtherSemester(course: secondHalfCourse, targetSemester: firstHalf) {
-                hasChanges = true
-            }
-        }
-        
-        // 変更があった場合のみ保存
-        if hasChanges {
-            saveContext()
-            print("通年科目同期完了: \(firstHalf.name ?? "前期") ⇔ \(secondHalf.name ?? "後期")")
-        }
-    }
-    
-    /// 指定学期の通年科目を取得
-    private func getFullYearCourses(for semester: Semester) -> [Course] {
-        let request: NSFetchRequest<Course> = Course.fetchRequest()
-        request.predicate = NSPredicate(format: "semester == %@ AND isFullYear == true", semester)
-        
-        do {
-            return try context.fetch(request)
-        } catch {
-            print("通年科目取得エラー: \(error)")
-            return []
-        }
-    }
+    // MARK: - 通年科目機能を廃止（複雑さとエラー要因のため削除）
     
     /// 科目を他の学期に同期
     @discardableResult
@@ -1218,8 +1016,7 @@ class AttendanceViewModel: ObservableObject {
             newCourse.maxAbsences = course.maxAbsences
             newCourse.semester = targetSemester
             newCourse.isNotificationEnabled = course.isNotificationEnabled
-            newCourse.isFullYear = course.isFullYear
-            newCourse.colorIndex = course.colorIndex
+                newCourse.colorIndex = course.colorIndex
             
             print("通年科目同期: \(courseName) を \(targetSemester.name ?? "") に追加")
             return true

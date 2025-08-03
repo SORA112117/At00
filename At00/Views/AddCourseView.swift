@@ -16,7 +16,6 @@ struct AddCourseView: View {
     @State private var courseName = ""
     @State private var totalClasses = 15
     @State private var maxAbsences = 5
-    @State private var isFullYear = false
     @State private var selectedColorIndex = 0
     @State private var showingDuplicateNameAlert = false
     @State private var showingSlotOccupiedAlert = false
@@ -47,16 +46,6 @@ struct AddCourseView: View {
                             maxAbsences = max(1, newValue / 3)
                         }
                     
-                    Toggle("通年科目", isOn: $isFullYear)
-                        .onChange(of: isFullYear) { _, newValue in
-                            if newValue {
-                                totalClasses = 30  // 通年科目は自動的に30回に設定
-                                maxAbsences = 10
-                            } else {
-                                totalClasses = 15
-                                maxAbsences = 5
-                            }
-                        }
                     
                     HStack {
                         Text("カラー")
@@ -103,7 +92,6 @@ struct AddCourseView: View {
                                 dayOfWeek: dayOfWeek,
                                 period: period,
                                 totalClasses: totalClasses,
-                                isFullYear: isFullYear,
                                 colorIndex: selectedColorIndex
                             )
                             
@@ -111,14 +99,7 @@ struct AddCourseView: View {
                             case .success:
                                 dismiss()
                             case .currentSlotOccupied:
-                                slotOccupiedMessage = "現在の学期のこの時間帯には既に授業が登録されています。"
-                                showingSlotOccupiedAlert = true
-                            case .otherSemesterSlotOccupied:
-                                let otherSemesterName = viewModel.currentSemesterType == .firstHalf ? "後期" : "前期"
-                                slotOccupiedMessage = "通年科目として登録するには、\(otherSemesterName)の同じ時間帯も空いている必要があります。\n\n\(otherSemesterName)のこの時間帯には既に授業が登録されているため、通年科目として追加できません。"
-                                showingSlotOccupiedAlert = true
-                            case .bothSlotsOccupied:
-                                slotOccupiedMessage = "前期・後期の両方でこの時間帯には既に授業が登録されています。"
+                                slotOccupiedMessage = "この時間帯には既に授業が登録されています。"
                                 showingSlotOccupiedAlert = true
                             }
                         }

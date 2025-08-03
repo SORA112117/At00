@@ -453,7 +453,7 @@ struct EnhancedCourseCell: View {
                     Spacer(minLength: 4) // カラーボックスの位置を少し下に
                     
                     createColorBoxGrid(course: course, absenceCount: absenceCount, cellWidth: cellWidth)
-                        .frame(height: course.isFullYear ? 16 : 8) // 正方形用に高さ調整
+                        .frame(height: 8) // 正方形用に高さ調整
                         .padding(.horizontal, 2)
                     
                     Spacer(minLength: 2)
@@ -564,32 +564,12 @@ struct EnhancedCourseCell: View {
         let boxSize: CGFloat = max(4, (cellWidth - 16) / 8) // 8列基準で統一
         
         return Group {
-            if course.isFullYear {
-                // 通年：2行5列（最大欠席数まで表示）
-                VStack(spacing: 1) {
-                    HStack(spacing: 1) {
-                        ForEach(0..<5, id: \.self) { index in
-                            Rectangle()
-                                .fill(getColorBoxColor(course: course, index: index, absenceCount: absenceCount))
-                                .frame(width: boxSize, height: boxSize) // 完全な正方形
-                        }
-                    }
-                    HStack(spacing: 1) {
-                        ForEach(5..<min(10, maxAbsences), id: \.self) { index in
-                            Rectangle()
-                                .fill(getColorBoxColor(course: course, index: index, absenceCount: absenceCount))
-                                .frame(width: boxSize, height: boxSize) // 完全な正方形
-                        }
-                    }
-                }
-            } else {
-                // 通常：1行（最大欠席数まで表示）
-                HStack(spacing: 1) {
-                    ForEach(0..<min(5, maxAbsences), id: \.self) { index in
-                        Rectangle()
-                            .fill(getColorBoxColor(course: course, index: index, absenceCount: absenceCount))
-                            .frame(width: boxSize, height: boxSize) // 完全な正方形
-                    }
+            // 1行（最大欠席数まで表示）
+            HStack(spacing: 1) {
+                ForEach(0..<min(5, maxAbsences), id: \.self) { index in
+                    Rectangle()
+                        .fill(getColorBoxColor(course: course, index: index, absenceCount: absenceCount))
+                        .frame(width: boxSize, height: boxSize) // 完全な正方形
                 }
             }
         }

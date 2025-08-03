@@ -342,15 +342,6 @@ struct EnhancedStatisticsView: View {
                     
                     Spacer()
                     
-                    if course.isFullYear {
-                        Text("通年")
-                            .font(.caption)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(Color.purple.opacity(0.1))
-                            .foregroundColor(.purple)
-                            .clipShape(Capsule())
-                    }
                 }
             }
         }
