@@ -18,6 +18,9 @@ struct AddCourseView: View {
     @State private var maxAbsences = 5
     @State private var isFullYear = false
     @State private var selectedColorIndex = 0
+    @State private var showingDuplicateNameAlert = false
+    @State private var showingSlotOccupiedAlert = false
+    @State private var slotOccupiedMessage = ""
     
     private let dayNames = ["", "月", "火", "水", "木", "金", "土", "日"]
     
@@ -90,18 +93,52 @@ struct AddCourseView: View {
                 
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button("追加") {
-                        viewModel.addCourse(
-                            name: courseName,
-                            dayOfWeek: dayOfWeek,
-                            period: period,
-                            totalClasses: totalClasses,
-                            isFullYear: isFullYear,
-                            colorIndex: selectedColorIndex
-                        )
-                        dismiss()
+                        // 同名科目のチェック
+                        if viewModel.hasCourseWithSameName(courseName) {
+                            showingDuplicateNameAlert = true
+                        } else {
+                            // 授業追加を試行
+                            let result = viewModel.addCourse(
+                                name: courseName,
+                                dayOfWeek: dayOfWeek,
+                                period: period,
+                                totalClasses: totalClasses,
+                                isFullYear: isFullYear,
+                                colorIndex: selectedColorIndex
+                            )
+                            
+                            switch result {
+                            case .success:
+                                dismiss()
+                            case .currentSlotOccupied:
+                                slotOccupiedMessage = "現在の学期のこの時間帯には既に授業が登録されています。"
+                                showingSlotOccupiedAlert = true
+                            case .otherSemesterSlotOccupied:
+                                let otherSemesterName = viewModel.currentSemesterType == .firstHalf ? "後期" : "前期"
+                                slotOccupiedMessage = "通年科目として登録するには、\(otherSemesterName)の同じ時間帯も空いている必要があります。\n\n\(otherSemesterName)のこの時間帯には既に授業が登録されているため、通年科目として追加できません。"
+                                showingSlotOccupiedAlert = true
+                            case .bothSlotsOccupied:
+                                slotOccupiedMessage = "前期・後期の両方でこの時間帯には既に授業が登録されています。"
+                                showingSlotOccupiedAlert = true
+                            }
+                        }
                     }
                     .disabled(courseName.isEmpty)
                 }
+            }
+            .alert("同名の授業が既に存在します", isPresented: $showingDuplicateNameAlert) {
+                Button("既存授業一覧から選択") {
+                    // 既存授業選択画面に遷移（CourseSelectionViewを使用）
+                    dismiss()
+                }
+                Button("キャンセル") { }
+            } message: {
+                Text("「\(courseName)」という名前の授業は既に登録されています。\n\n同じ名前の授業を別の時間割に追加したい場合は、新規作成ではなく「既存の授業一覧から選択」してください。\n\nこうすることで、欠席記録が正しく同期され、どの時間割の授業で欠席しても同じカウントとして管理されます。")
+            }
+            .alert("時間割が重複しています", isPresented: $showingSlotOccupiedAlert) {
+                Button("OK") { }
+            } message: {
+                Text(slotOccupiedMessage)
             }
         }
     }

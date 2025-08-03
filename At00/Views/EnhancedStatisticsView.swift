@@ -9,7 +9,7 @@ import SwiftUI
 import CoreData
 
 struct EnhancedStatisticsView: View {
-    @StateObject private var viewModel = AttendanceViewModel()
+    @EnvironmentObject private var viewModel: AttendanceViewModel
     @State private var selectedTimeFrame: TimeFrame = .monthly
     @State private var selectedPeriod = Date()
     @State private var refreshTrigger = UUID() // リアルタイム更新用
@@ -405,7 +405,7 @@ struct EnhancedStatisticsView: View {
     private func getAbsencesInPeriod(for course: Course) -> [AttendanceRecord] {
         let (startDate, endDate) = currentPeriodDates
         
-        // 同名科目のすべての欠席記録を取得（通年科目対応）
+        // 同名科目のすべての欠席記録を取得（代表Course方式なので重複はないはず）
         guard let courseName = course.courseName else { return [] }
         
         let request: NSFetchRequest<AttendanceRecord> = AttendanceRecord.fetchRequest()
@@ -423,6 +423,7 @@ struct EnhancedStatisticsView: View {
                 endDate as NSDate,
                 AttendanceType.allCases.filter { $0.affectsCredit }.map { $0.rawValue }
             )
+            request.sortDescriptors = [NSSortDescriptor(keyPath: \AttendanceRecord.date, ascending: true)]
             
             return try viewModel.managedObjectContext.fetch(request)
         } catch {

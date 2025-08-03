@@ -75,7 +75,7 @@ struct RecordDetailView: View {
                 
                 // 記録ボタン
                 Button(action: {
-                    viewModel.recordAbsence(for: course, type: selectedType, memo: memo)
+                    _ = viewModel.recordAbsence(for: course, type: selectedType, memo: memo)
                     dismiss()
                 }) {
                     HStack {

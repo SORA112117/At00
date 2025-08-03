@@ -9,7 +9,7 @@ import SwiftUI
 import Charts
 
 struct StatisticsView: View {
-    @StateObject private var viewModel = AttendanceViewModel()
+    @EnvironmentObject private var viewModel: AttendanceViewModel
     @State private var selectedPeriod: StatisticsPeriod = .thisWeek
     
     enum StatisticsPeriod: String, CaseIterable {

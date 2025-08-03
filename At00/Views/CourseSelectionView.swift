@@ -126,18 +126,28 @@ struct CourseSelectionView: View {
                 }
             }
             .onAppear {
-                // ViewModelの初期化を確実に待つ
+                // 即座に初期化状態をチェックして設定
+                print("CourseSelectionView onAppear - isInitialized: \(viewModel.isInitialized), currentSemester: \(viewModel.currentSemester?.name ?? "nil")")
+                
+                // ViewModelが初期化されていない場合は強制的に初期化
+                if !viewModel.isInitialized {
+                    print("ViewModelが未初期化のため、緊急初期化を実行")
+                    viewModel.loadCurrentSemester()
+                    viewModel.loadTimetable()
+                }
+                
+                // currentSemesterがない場合も再読み込み
                 if viewModel.currentSemester == nil {
-                    // currentSemesterがない場合は再読み込み
+                    print("currentSemesterがnilのため、再読み込み")
                     viewModel.loadCurrentSemester()
                 }
                 
-                // 少し遅延を入れて確実に初期化
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                    loadAvailableExistingCourses()
-                    if !hasAppeared {
-                        hasAppeared = true
-                    }
+                // 即座に既存授業を読み込み（遅延なし）
+                loadAvailableExistingCourses()
+                
+                // 表示フラグを即座に設定
+                if !hasAppeared {
+                    hasAppeared = true
                 }
             }
             .background(Color(.systemGroupedBackground)) // 背景色を明示的に設定
@@ -181,7 +191,7 @@ struct CourseSelectionView: View {
             return
         }
         
-        _ = viewModel.addCourse(
+        let newCourse = viewModel.addCourse(
             name: newCourseName,
             dayOfWeek: dayOfWeek,
             period: period,
@@ -189,6 +199,17 @@ struct CourseSelectionView: View {
             isFullYear: newIsFullYear,
             colorIndex: newSelectedColorIndex
         )
+        
+        switch newCourse {
+        case .success:
+            print("新規授業作成成功: \(newCourseName)")
+        case .currentSlotOccupied:
+            print("新規授業作成失敗（現在のスロット占有）: \(newCourseName)")
+        case .otherSemesterSlotOccupied:
+            print("新規授業作成失敗（他学期スロット占有）: \(newCourseName)")
+        case .bothSlotsOccupied:
+            print("新規授業作成失敗（両方のスロット占有）: \(newCourseName)")
+        }
         
         // 即座に時間割を再読み込み
         viewModel.loadTimetable()

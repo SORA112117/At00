@@ -11,37 +11,13 @@ import UserNotifications
 import LocalAuthentication
 
 struct SettingsView: View {
-    @StateObject private var viewModel = AttendanceViewModel()
-    @State private var showingNewSemester = false
-    @State private var showingDataExport = false
+    @EnvironmentObject private var viewModel: AttendanceViewModel
     @State private var showingResetConfirmation = false
     @State private var selectedSemesterForReset: Semester?
     
     var body: some View {
         NavigationView {
             List {
-                // 学期管理セクション
-                Section("学期管理") {
-                    if let semester = viewModel.currentSemester {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(semester.name ?? "")
-                                .font(.headline)
-                            Text("開始: \(semester.startDate?.formatted(date: .abbreviated, time: .omitted) ?? "")")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                            Text("終了: \(semester.endDate?.formatted(date: .abbreviated, time: .omitted) ?? "")")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                        }
-                        .padding(.vertical, 4)
-                    }
-                    
-                    Button("新しい学期を作成") {
-                        showingNewSemester = true
-                    }
-                    .foregroundColor(.blue)
-                }
-                
                 // 出席設定セクション
                 Section("出席設定") {
                     NavigationLink("通知設定") {
@@ -62,13 +38,8 @@ struct SettingsView: View {
                 
                 // データ管理セクション
                 Section("データ管理") {
-                    Button("データをエクスポート") {
-                        showingDataExport = true
-                    }
-                    .foregroundColor(.blue)
-                    
-                    Button("データをインポート") {
-                        // データインポート機能（実装予定）
+                    NavigationLink("時間割シート管理") {
+                        TimetableSheetManagementView()
                     }
                     .foregroundColor(.blue)
                     
@@ -87,104 +58,20 @@ struct SettingsView: View {
                             .foregroundColor(.secondary)
                     }
                     
-                    NavigationLink("利用規約") {
-                        TermsOfServiceView()
-                    }
-                    
-                    NavigationLink("プライバシーポリシー") {
-                        PrivacyPolicyView()
-                    }
-                    
-                    NavigationLink("サポート") {
-                        SupportView()
-                    }
                 }
             }
             .navigationTitle("設定")
             .navigationBarTitleDisplayMode(.large)
-            .sheet(isPresented: $showingNewSemester) {
-                NewSemesterView(viewModel: viewModel)
-            }
-            .sheet(isPresented: $showingDataExport) {
-                DataExportView()
-            }
         }
     }
 }
 
-struct NewSemesterView: View {
-    @ObservedObject var viewModel: AttendanceViewModel
-    @Environment(\.dismiss) private var dismiss
-    
-    @State private var semesterName = ""
-    @State private var startDate = Date()
-    @State private var endDate = Calendar.current.date(byAdding: .month, value: 4, to: Date()) ?? Date()
-    
-    var body: some View {
-        NavigationView {
-            Form {
-                Section("学期情報") {
-                    TextField("学期名", text: $semesterName)
-                        .textInputAutocapitalization(.words)
-                    
-                    DatePicker("開始日", selection: $startDate, displayedComponents: .date)
-                    
-                    DatePicker("終了日", selection: $endDate, displayedComponents: .date)
-                }
-                
-                Section {
-                    Text("新しい学期を作成すると、現在の学期が非アクティブになります。")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-            }
-            .navigationTitle("新学期作成")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button("キャンセル") {
-                        dismiss()
-                    }
-                }
-                
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("作成") {
-                        createNewSemester()
-                        dismiss()
-                    }
-                    .disabled(semesterName.isEmpty || startDate >= endDate)
-                }
-            }
-        }
-    }
-    
-    private func createNewSemester() {
-        // 新学期作成の実装
-        let context = viewModel.managedObjectContext
-        
-        // 既存の学期を非アクティブにする
-        let existingSemesters = try? context.fetch(Semester.fetchRequest())
-        existingSemesters?.forEach { $0.isActive = false }
-        
-        // 新しい学期を作成
-        let newSemester = Semester(context: context)
-        newSemester.semesterId = UUID()
-        newSemester.name = semesterName
-        newSemester.startDate = startDate
-        newSemester.endDate = endDate
-        newSemester.isActive = true
-        newSemester.createdAt = Date()
-        
-        try? context.save()
-        viewModel.loadCurrentSemester()
-        viewModel.loadTimetable()
-    }
-}
 
 
 // MARK: - 強化された設定ビュー群
 
 struct NotificationSettingsView: View {
+    @EnvironmentObject private var viewModel: AttendanceViewModel
     @AppStorage("notificationsEnabled") private var notificationsEnabled = false
     @AppStorage("absentLimitNotification") private var absentLimitNotification = true
     @AppStorage("reminderNotification") private var reminderNotification = false
@@ -193,6 +80,7 @@ struct NotificationSettingsView: View {
     
     @State private var reminderTime = Date()
     @State private var showingReminderSettings = false
+    private let notificationManager = NotificationManager.shared
     
     let reminderFrequencies = [
         ("daily", "毎日"),
@@ -206,7 +94,21 @@ struct NotificationSettingsView: View {
                 Toggle("プッシュ通知を有効にする", isOn: $notificationsEnabled)
                     .onChange(of: notificationsEnabled) { _, newValue in
                         if newValue {
-                            requestNotificationPermission()
+                            Task {
+                                let granted = await viewModel.requestNotificationPermission()
+                                if !granted {
+                                    DispatchQueue.main.async {
+                                        notificationsEnabled = false
+                                    }
+                                } else {
+                                    // 通知が有効になったら設定を更新
+                                    viewModel.updateReminderNotifications()
+                                    viewModel.updateClassReminders()
+                                }
+                            }
+                        } else {
+                            // 通知が無効になったらすべてキャンセル
+                            viewModel.cancelAllNotifications()
                         }
                     }
                 
@@ -222,18 +124,27 @@ struct NotificationSettingsView: View {
                             withAnimation(.easeInOut(duration: 0.3)) {
                                 showingReminderSettings = newValue
                             }
+                            if newValue {
+                                viewModel.updateReminderNotifications()
+                            } else {
+                                notificationManager.cancelReminderNotifications()
+                            }
                         }
                     
                     if showingReminderSettings && reminderNotification {
                         DatePicker("通知時刻", selection: $reminderTime, displayedComponents: .hourAndMinute)
                             .onChange(of: reminderTime) { _, newValue in
                                 saveReminderTime(newValue)
+                                viewModel.updateReminderNotifications()
                             }
                         
                         Picker("頻度", selection: $reminderFrequency) {
                             ForEach(reminderFrequencies, id: \.0) { frequency, name in
                                 Text(name).tag(frequency)
                             }
+                        }
+                        .onChange(of: reminderFrequency) { _, _ in
+                            viewModel.updateReminderNotifications()
                         }
                         
                         Text("設定した時刻に出席記録の入力を促す通知が届きます")
@@ -250,15 +161,6 @@ struct NotificationSettingsView: View {
         }
     }
     
-    private func requestNotificationPermission() {
-        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .badge, .sound]) { granted, error in
-            DispatchQueue.main.async {
-                if !granted {
-                    notificationsEnabled = false
-                }
-            }
-        }
-    }
     
     private func saveReminderTime(_ time: Date) {
         if let encoded = try? JSONEncoder().encode(time) {
@@ -493,51 +395,156 @@ struct PasscodeSetupView: View {
     }
 }
 
-struct DataExportView: View {
-    var body: some View {
-        VStack {
-            Text("データエクスポート機能は準備中です")
-                .padding()
-        }
-        .navigationTitle("データエクスポート")
-    }
-}
-
-struct TermsOfServiceView: View {
-    var body: some View {
-        ScrollView {
-            Text("利用規約の内容がここに表示されます")
-                .padding()
-        }
-        .navigationTitle("利用規約")
-    }
-}
-
-struct PrivacyPolicyView: View {
-    var body: some View {
-        ScrollView {
-            Text("プライバシーポリシーの内容がここに表示されます")
-                .padding()
-        }
-        .navigationTitle("プライバシーポリシー")
-    }
-}
-
-struct SupportView: View {
+// MARK: - 時間割シート管理ビュー
+struct TimetableSheetManagementView: View {
+    @EnvironmentObject private var viewModel: AttendanceViewModel
+    @State private var showingAddSheet = false
+    @State private var showingEditSheet = false
+    @State private var showingDeleteConfirmation = false
+    @State private var sheetToEdit: Semester?
+    @State private var sheetToDelete: Semester?
+    
     var body: some View {
         List {
-            Section("サポート") {
-                Button("お問い合わせ") {
-                    // メール送信機能
-                }
-                Button("使い方ガイド") {
-                    // ガイド表示
+            Section {
+                Text("時間割シートを追加・削除できます。前期と後期がペアになった時間割シートは、通年科目が自動的に同期されます。")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+                    .padding(.vertical, 8)
+            }
+            
+            Section("時間割シート一覧") {
+                ForEach(viewModel.availableSemesters, id: \.semesterId) { semester in
+                    TimetableSheetRow(
+                        semester: semester,
+                        onEdit: {
+                            sheetToEdit = semester
+                            showingEditSheet = true
+                        },
+                        onDelete: {
+                            sheetToDelete = semester
+                            showingDeleteConfirmation = true
+                        }
+                    )
                 }
             }
         }
-        .navigationTitle("サポート")
+        .navigationTitle("時間割シート管理")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button("追加") {
+                    showingAddSheet = true
+                }
+            }
+        }
+        .sheet(isPresented: $showingAddSheet) {
+            AddTimetableSheetView()
+        }
+        .sheet(isPresented: $showingEditSheet) {
+            if let semester = sheetToEdit {
+                EditTimetableSheetView(semester: semester)
+            }
+        }
+        .alert("時間割シート削除", isPresented: $showingDeleteConfirmation) {
+            Button("削除", role: .destructive) {
+                if let semester = sheetToDelete {
+                    deleteTimetableSheet(semester)
+                }
+            }
+            Button("キャンセル", role: .cancel) {}
+        } message: {
+            if let semester = sheetToDelete {
+                Text("\(semester.name ?? "")を削除しますか？\n\nこのシートの授業データと欠席記録がすべて削除されます。この操作は取り消せません。")
+            }
+        }
+    }
+    
+    private func deleteTimetableSheet(_ semester: Semester) {
+        viewModel.resetSemesterTimetable(for: semester)
+        
+        // 学期自体も削除
+        viewModel.managedObjectContext.delete(semester)
+        viewModel.save()
+        
+        // 利用可能学期リストを更新
+        viewModel.setupSemesters()
+        
+        sheetToDelete = nil
     }
 }
+
+// MARK: - 時間割シート行
+struct TimetableSheetRow: View {
+    let semester: Semester
+    let onEdit: () -> Void
+    let onDelete: () -> Void
+    @EnvironmentObject private var viewModel: AttendanceViewModel
+    
+    var body: some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(semester.name ?? "")
+                    .font(.headline)
+                
+                HStack {
+                    Text("開始: \(formatDate(semester.startDate))")
+                    Text("終了: \(formatDate(semester.endDate))")
+                }
+                .font(.caption)
+                .foregroundColor(.secondary)
+                
+                Text("授業数: \(getCourseCount())件")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+            
+            Spacer()
+            
+            if semester.isActive {
+                Text("使用中")
+                    .font(.caption)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Color.green)
+                    .foregroundColor(.white)
+                    .cornerRadius(8)
+            }
+            
+            // 編集ボタン
+            Button("編集") {
+                onEdit()
+            }
+            .font(.caption)
+            .foregroundColor(.blue)
+            .buttonStyle(PlainButtonStyle())
+            
+            // 削除ボタン
+            Button("削除") {
+                onDelete()
+            }
+            .font(.caption)
+            .foregroundColor(.red)
+            .buttonStyle(PlainButtonStyle())
+        }
+        .padding(.vertical, 4)
+        .contentShape(Rectangle()) // タップ領域を明確にする
+    }
+    
+    private func formatDate(_ date: Date?) -> String {
+        guard let date = date else { return "-" }
+        let formatter = DateFormatter()
+        formatter.dateFormat = "M/d"
+        return formatter.string(from: date)
+    }
+    
+    private func getCourseCount() -> Int {
+        let request: NSFetchRequest<Course> = Course.fetchRequest()
+        request.predicate = NSPredicate(format: "semester == %@", semester)
+        return (try? viewModel.managedObjectContext.count(for: request)) ?? 0
+    }
+}
+
 
 // MARK: - 学期別リセットビュー
 struct SemesterResetView: View {
@@ -583,6 +590,14 @@ struct SemesterResetView: View {
             Button("リセット", role: .destructive) {
                 if let semester = selectedSemester {
                     viewModel.resetSemesterTimetable(for: semester)
+                    
+                    // リアルタイム反映のための通知送信
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                        NotificationCenter.default.post(name: .courseDataDidChange, object: nil)
+                        NotificationCenter.default.post(name: .attendanceDataDidChange, object: nil)
+                        NotificationCenter.default.post(name: .statisticsDataDidChange, object: nil)
+                    }
+                    
                     dismiss()
                 }
             }

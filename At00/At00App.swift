@@ -11,11 +11,13 @@ import SwiftUI
 @main
 struct At00App: App {
     let persistenceController = PersistenceController.shared
+    @StateObject private var attendanceViewModel = AttendanceViewModel()
     
     var body: some Scene {
         WindowGroup {
             MainTabView()
                 .environment(\.managedObjectContext, persistenceController.container.viewContext)
+                .environmentObject(attendanceViewModel)
         }
     }
 }

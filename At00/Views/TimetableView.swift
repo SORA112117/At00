@@ -85,6 +85,15 @@ struct TimetableView: View {
                             period: timeSlot.period,
                             viewModel: viewModel
                         )
+                        .onAppear {
+                            // シート表示時にViewModelの初期化を確実に実行
+                            print("TimetableView: CourseSelectionViewシート表示開始")
+                            if !viewModel.isInitialized || viewModel.currentSemester == nil {
+                                print("TimetableView: ViewModelの緊急初期化を実行")
+                                viewModel.loadCurrentSemester()
+                                viewModel.loadTimetable()
+                            }
+                        }
                     }
                     .navigationViewStyle(StackNavigationViewStyle())
                     .id("\(timeSlot.day)-\(timeSlot.period)") // 一意のIDで強制的に再生成
@@ -124,6 +133,15 @@ struct TimetableView: View {
                 if let course = selectedCourse {
                     NavigationView {
                         EditCourseDetailView(course: course, viewModel: viewModel)
+                            .onAppear {
+                                // 編集画面表示時にViewModelの初期化を確実に実行
+                                print("TimetableView: EditCourseDetailViewシート表示開始")
+                                if !viewModel.isInitialized || viewModel.currentSemester == nil {
+                                    print("TimetableView: 編集画面でViewModelの緊急初期化を実行")
+                                    viewModel.loadCurrentSemester()
+                                    viewModel.loadTimetable()
+                                }
+                            }
                     }
                     .navigationViewStyle(StackNavigationViewStyle())
                 }

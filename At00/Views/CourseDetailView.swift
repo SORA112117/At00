@@ -91,7 +91,7 @@ struct CourseDetailView: View {
                         // 欠席記録ボタン
                         Button(action: {
                             withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
-                                viewModel.recordAbsence(for: course)
+                                _ = viewModel.recordAbsence(for: course)
                             }
                             // ハプティックフィードバック
                             let impactFeedback = UIImpactFeedbackGenerator(style: .medium)
