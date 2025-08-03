@@ -149,16 +149,42 @@ struct CourseSelectionView: View {
     private func loadAvailableExistingCourses() {
         guard let semester = viewModel.currentSemester else { return }
         
-        let request: NSFetchRequest<Course> = Course.fetchRequest()
-        request.predicate = NSPredicate(format: "semester == %@", semester)
-        request.sortDescriptors = [
-            NSSortDescriptor(keyPath: \Course.courseName, ascending: true)
-        ]
+        // 1. 現在の学期の授業を取得
+        let currentSemesterRequest: NSFetchRequest<Course> = Course.fetchRequest()
+        currentSemesterRequest.predicate = NSPredicate(format: "semester == %@", semester)
         
-        let allCourses = (try? viewModel.managedObjectContext.fetch(request)) ?? []
+        // 2. 通年科目の継承のため、他学期の通年科目も取得
+        let fullYearRequest: NSFetchRequest<Course> = Course.fetchRequest()
+        fullYearRequest.predicate = NSPredicate(format: "isFullYear == YES")
         
-        // 重複した名前の授業を除外し、現在の位置に既に配置されていない授業のみを表示
-        var uniqueCourseNames = Set<String>()
+        let currentSemesterCourses = (try? viewModel.managedObjectContext.fetch(currentSemesterRequest)) ?? []
+        let fullYearCourses = (try? viewModel.managedObjectContext.fetch(fullYearRequest)) ?? []
+        
+        // 3. 全ての授業を統合（重複排除）
+        var allCourses: [Course] = []
+        var processedCourseNames = Set<String>()
+        
+        // 現在の学期の授業を優先
+        for course in currentSemesterCourses {
+            if let courseName = course.courseName, !courseName.isEmpty {
+                if !processedCourseNames.contains(courseName) {
+                    allCourses.append(course)
+                    processedCourseNames.insert(courseName)
+                }
+            }
+        }
+        
+        // 通年科目で、現在の学期にまだ存在しないものを追加
+        for course in fullYearCourses {
+            if let courseName = course.courseName,
+               !courseName.isEmpty,
+               !processedCourseNames.contains(courseName) {
+                allCourses.append(course)
+                processedCourseNames.insert(courseName)
+            }
+        }
+        
+        // 4. 現在の位置に既に配置されていない授業のみを表示
         availableExistingCourses = allCourses.compactMap { course in
             guard let courseName = course.courseName,
                   !courseName.isEmpty,
@@ -166,13 +192,14 @@ struct CourseSelectionView: View {
                 return nil
             }
             
-            // 既に同名の授業が存在する場合はスキップ
-            if uniqueCourseNames.contains(courseName) {
-                return nil
-            }
-            
-            uniqueCourseNames.insert(courseName)
             return course
+        }
+        
+        // 5. 授業名でソート
+        availableExistingCourses.sort { course1, course2 in
+            let name1 = course1.courseName ?? ""
+            let name2 = course2.courseName ?? ""
+            return name1 < name2
         }
     }
     
@@ -321,14 +348,38 @@ struct SimpleExistingCourseCard: View {
                             .font(.caption)
                             .foregroundColor(.secondary)
                         
+                        // 学期情報を表示
+                        Text(course.semester?.name ?? "不明")
+                            .font(.caption2)
+                            .padding(.horizontal, 4)
+                            .padding(.vertical, 1)
+                            .background(Color(.systemGray5))
+                            .foregroundColor(.secondary)
+                            .clipShape(Capsule())
+                        
                         if course.isFullYear {
-                            Text("通年")
-                                .font(.caption)
-                                .padding(.horizontal, 6)
-                                .padding(.vertical, 2)
-                                .background(Color.purple.opacity(0.1))
-                                .foregroundColor(.purple)
-                                .clipShape(Capsule())
+                            // 他学期の通年科目か現在学期の通年科目かを区別
+                            let isFromOtherSemester = course.semester != viewModel.currentSemester
+                            
+                            HStack(spacing: 4) {
+                                Text("通年")
+                                    .font(.caption)
+                                    .padding(.horizontal, 6)
+                                    .padding(.vertical, 2)
+                                    .background(Color.purple.opacity(0.1))
+                                    .foregroundColor(.purple)
+                                    .clipShape(Capsule())
+                                
+                                if isFromOtherSemester {
+                                    Text("データ継承")
+                                        .font(.caption2)
+                                        .padding(.horizontal, 4)
+                                        .padding(.vertical, 1)
+                                        .background(Color.blue.opacity(0.1))
+                                        .foregroundColor(.blue)
+                                        .clipShape(Capsule())
+                                }
+                            }
                         }
                     }
                 }

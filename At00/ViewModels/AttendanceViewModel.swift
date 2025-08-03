@@ -629,6 +629,12 @@ class AttendanceViewModel: ObservableObject {
     func assignExistingCourse(course: Course, newDayOfWeek: Int, newPeriod: Int) {
         guard let semester = currentSemester else { return }
         
+        // 通年科目で他学期から選択した場合の特別処理
+        if course.isFullYear && course.semester != semester {
+            assignFullYearCourseFromOtherSemester(course: course, newDayOfWeek: newDayOfWeek, newPeriod: newPeriod)
+            return
+        }
+        
         // 既存の授業の複製を作成
         let newCourse = Course(context: context)
         newCourse.courseId = UUID()
@@ -649,17 +655,20 @@ class AttendanceViewModel: ObservableObject {
         if course.isFullYear {
             let otherType: SemesterType = (currentSemesterType == .firstHalf) ? .secondHalf : .firstHalf
             if let otherSemester = availableSemesters.first(where: { $0.semesterType == otherType.rawValue }) {
-                let otherCourse = Course(context: context)
-                otherCourse.courseId = UUID()
-                otherCourse.courseName = course.courseName
-                otherCourse.dayOfWeek = Int16(newDayOfWeek)
-                otherCourse.period = Int16(newPeriod)
-                otherCourse.totalClasses = course.totalClasses
-                otherCourse.maxAbsences = course.maxAbsences
-                otherCourse.semester = otherSemester
-                otherCourse.isNotificationEnabled = course.isNotificationEnabled
-                otherCourse.isFullYear = course.isFullYear
-                otherCourse.colorIndex = course.colorIndex
+                // 他学期に同じ位置の授業が既に存在するかチェック
+                if !hasExistingCourseInSlot(dayOfWeek: newDayOfWeek, period: newPeriod, semester: otherSemester) {
+                    let otherCourse = Course(context: context)
+                    otherCourse.courseId = UUID()
+                    otherCourse.courseName = course.courseName
+                    otherCourse.dayOfWeek = Int16(newDayOfWeek)
+                    otherCourse.period = Int16(newPeriod)
+                    otherCourse.totalClasses = course.totalClasses
+                    otherCourse.maxAbsences = course.maxAbsences
+                    otherCourse.semester = otherSemester
+                    otherCourse.isNotificationEnabled = course.isNotificationEnabled
+                    otherCourse.isFullYear = course.isFullYear
+                    otherCourse.colorIndex = course.colorIndex
+                }
             }
         }
         
@@ -669,6 +678,59 @@ class AttendanceViewModel: ObservableObject {
         // コースデータの更新を通知
         NotificationCenter.default.post(name: .courseDataDidChange, object: nil)
         NotificationCenter.default.post(name: .statisticsDataDidChange, object: nil)
+    }
+    
+    // 他学期の通年科目を現在の学期に配置する専用メソッド
+    private func assignFullYearCourseFromOtherSemester(course: Course, newDayOfWeek: Int, newPeriod: Int) {
+        guard let semester = currentSemester,
+              let courseName = course.courseName else { return }
+        
+        print("通年科目データ継承: \(courseName) を他学期から配置")
+        
+        // 現在の学期に新しい授業を作成（データは共有）
+        let newCourse = Course(context: context)
+        newCourse.courseId = UUID()
+        newCourse.courseName = courseName
+        newCourse.dayOfWeek = Int16(newDayOfWeek)
+        newCourse.period = Int16(newPeriod)
+        newCourse.totalClasses = course.totalClasses
+        newCourse.maxAbsences = course.maxAbsences
+        newCourse.semester = semester
+        newCourse.isNotificationEnabled = course.isNotificationEnabled
+        newCourse.isFullYear = true  // 必ず通年科目として設定
+        newCourse.colorIndex = course.colorIndex
+        
+        // 元の授業の設定も通年科目として確実に設定
+        course.isFullYear = true
+        
+        saveContext()
+        loadTimetable()
+        
+        // コースデータの更新を通知
+        NotificationCenter.default.post(name: .courseDataDidChange, object: nil)
+        NotificationCenter.default.post(name: .statisticsDataDidChange, object: nil)
+        
+        print("通年科目データ継承完了: \(courseName)")
+    }
+    
+    // 指定された学期のスロットに授業が存在するかチェック
+    private func hasExistingCourseInSlot(dayOfWeek: Int, period: Int, semester: Semester) -> Bool {
+        let request: NSFetchRequest<Course> = Course.fetchRequest()
+        request.predicate = NSPredicate(
+            format: "semester == %@ AND dayOfWeek == %@ AND period == %@",
+            semester,
+            Int16(dayOfWeek),
+            Int16(period)
+        )
+        request.fetchLimit = 1
+        
+        do {
+            let existingCourses = try context.fetch(request)
+            return !existingCourses.isEmpty
+        } catch {
+            print("スロット占有チェックエラー: \(error)")
+            return false
+        }
     }
     
     // 授業を削除（同名科目と関連データをすべて削除）
