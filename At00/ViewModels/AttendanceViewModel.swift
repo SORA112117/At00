@@ -18,12 +18,27 @@ extension Notification.Name {
     static let coreDataError = Notification.Name("coreDataError")
 }
 
+// MARK: - エラーバナー情報
+struct ErrorBannerInfo: Identifiable, Equatable {
+    let id = UUID()
+    let message: String
+    let type: DesignSystem.ErrorBanner.ErrorType
+    let duration: TimeInterval
+    
+    init(message: String, type: DesignSystem.ErrorBanner.ErrorType, duration: TimeInterval = 5.0) {
+        self.message = message
+        self.type = type
+        self.duration = duration
+    }
+}
+
 class AttendanceViewModel: ObservableObject {
     @Published var currentSemester: Semester?
     @Published var timetable: [[Course?]] = Array(repeating: Array(repeating: nil, count: 5), count: 5)
     @Published var isLoading = false
     @Published var isInitialized = false
     @Published var errorMessage: String?
+    @Published var errorBanner: ErrorBannerInfo?
     @Published var currentSemesterType: SemesterType = .firstHalf
     @Published var availableSemesters: [Semester] = []
     
@@ -959,6 +974,12 @@ class AttendanceViewModel: ObservableObject {
             
             print("Core Data保存エラー: \(error.localizedDescription)")
             
+            // エラーバナーの表示
+            showErrorBanner(
+                message: "データの保存に失敗しました",
+                type: .error
+            )
+            
             // エラー通知を送信
             NotificationCenter.default.post(
                 name: .coreDataError,
@@ -1215,5 +1236,36 @@ class AttendanceViewModel: ObservableObject {
             let otherYear = Calendar.current.component(.year, from: otherStartDate)
             return otherYear == year
         }
+    }
+    
+    // MARK: - エラーハンドリングメソッド
+    
+    /// エラーバナーを表示
+    func showErrorBanner(message: String, type: DesignSystem.ErrorBanner.ErrorType) {
+        DispatchQueue.main.async {
+            self.errorBanner = ErrorBannerInfo(message: message, type: type)
+            
+            // 自動的にバナーを消去
+            DispatchQueue.main.asyncAfter(deadline: .now() + 5.0) {
+                if self.errorBanner?.message == message {
+                    self.errorBanner = nil
+                }
+            }
+        }
+    }
+    
+    /// エラーバナーを手動で消去
+    func dismissErrorBanner() {
+        errorBanner = nil
+    }
+    
+    /// 成功メッセージを表示
+    func showSuccessMessage(_ message: String) {
+        showErrorBanner(message: message, type: .info)
+    }
+    
+    /// 警告メッセージを表示
+    func showWarning(_ message: String) {
+        showErrorBanner(message: message, type: .warning)
     }
 }

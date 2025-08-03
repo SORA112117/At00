@@ -460,7 +460,7 @@ struct EnhancedCourseCell: View {
                 } else {
                     Text("+")
                         .font(.system(size: 20, weight: .ultraLight))
-                        .foregroundColor(.gray.opacity(0.6))
+                        .foregroundColor(Color(.systemGray2))
                 }
             }
             .frame(width: cellWidth, height: cellHeight)
@@ -605,11 +605,11 @@ struct EnhancedCourseCell: View {
             } else if absenceCount == maxAbsences - 1 {
                 return .orange // 危険圏：オレンジ
             } else {
-                return Color(red: 0.4, green: 0.8, blue: 0.4) // 安全圏：目に優しいマットな緑
+                return .green.opacity(0.7) // 安全圏：システム緑（ダークモード対応）
             }
         } else {
-            // まだ欠席していない部分：薄い灰色で予定エリアを表示
-            return Color.gray.opacity(0.3)
+            // まだ欠席していない部分：システムグレー（ダークモード対応）
+            return Color(.systemGray4)
         }
     }
     

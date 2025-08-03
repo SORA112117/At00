@@ -56,16 +56,8 @@ struct CourseSelectionView: View {
                 
                 // ViewModelが初期化されているか確認
                 if !viewModel.isInitialized || viewModel.currentSemester == nil {
-                    // 初期化中の表示
-                    VStack {
-                        ProgressView()
-                            .scaleEffect(1.5)
-                            .padding()
-                        Text("読み込み中...")
-                            .foregroundColor(.secondary)
-                    }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(Color(.systemGroupedBackground))
+                    // 統一されたローディング表示
+                    DesignSystem.LoadingView(message: "読み込み中...")
                 } else {
                     // コンテンツ
                     ZStack {
@@ -260,24 +252,12 @@ struct ExistingCourseSelectionView: View {
     var body: some View {
         Group {
             if availableCourses.isEmpty {
-                // 既存授業がない場合の表示
-                VStack(spacing: 20) {
-                    Image(systemName: "book.closed")
-                        .font(.system(size: 50))
-                        .foregroundColor(.gray.opacity(0.6))
-                    
-                    Text("既存授業がありません")
-                        .font(.title3)
-                        .fontWeight(.medium)
-                        .foregroundColor(.primary)
-                    
-                    Text("新規作成から授業を追加してください")
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
-                        .multilineTextAlignment(.center)
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(Color(.systemGroupedBackground))
+                // 統一された空状態表示
+                DesignSystem.EmptyStateView(
+                    icon: "book.closed",
+                    title: "既存授業がありません",
+                    message: "新規作成から授業を追加してください"
+                )
             } else {
                 // 既存授業のシンプルなリスト
                 ScrollView {
@@ -403,7 +383,7 @@ struct NewCourseCreationView: View {
                 .background(
                     RoundedRectangle(cornerRadius: 16)
                         .fill(Color(.systemBackground))
-                        .shadow(color: .black.opacity(0.05), radius: 4, x: 0, y: 2)
+                        .shadow(color: DesignSystem.adaptiveShadowColor, radius: 4, x: 0, y: 2)
                 )
                 
                 // 授業設定
@@ -440,7 +420,7 @@ struct NewCourseCreationView: View {
                 .background(
                     RoundedRectangle(cornerRadius: 16)
                         .fill(Color(.systemBackground))
-                        .shadow(color: .black.opacity(0.05), radius: 4, x: 0, y: 2)
+                        .shadow(color: DesignSystem.adaptiveShadowColor, radius: 4, x: 0, y: 2)
                 )
                 .onChange(of: totalClasses) { _, newValue in
                     maxAbsences = max(1, newValue / 3)
@@ -482,7 +462,7 @@ struct NewCourseCreationView: View {
                 .background(
                     RoundedRectangle(cornerRadius: 16)
                         .fill(Color(.systemBackground))
-                        .shadow(color: .black.opacity(0.05), radius: 4, x: 0, y: 2)
+                        .shadow(color: DesignSystem.adaptiveShadowColor, radius: 4, x: 0, y: 2)
                 )
                 
                 // ヒント

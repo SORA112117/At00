@@ -9,6 +9,10 @@ import SwiftUI
 
 struct DesignSystem {
     
+    // MARK: - 適応的カラー定義
+    static let adaptiveShadowColor = Color(.systemGray4).opacity(0.3)
+    static let adaptiveProgressBackground = Color(.systemGray5)
+    
     // MARK: - カラーパレット
     static let colorPalette: [Color] = [
         .blue, .green, .orange, .purple, .pink, 
@@ -29,7 +33,7 @@ struct DesignSystem {
             content
                 .background(Color(.systemBackground))
                 .cornerRadius(cornerRadius)
-                .shadow(color: .black.opacity(0.05), radius: shadowRadius, x: 0, y: 4)
+                .shadow(color: DesignSystem.adaptiveShadowColor, radius: shadowRadius, x: 0, y: 4)
         }
     }
     
@@ -65,7 +69,7 @@ struct DesignSystem {
     ) -> some View {
         ZStack(alignment: .leading) {
             RoundedRectangle(cornerRadius: cornerRadius)
-                .fill(Color.gray.opacity(0.2))
+                .fill(DesignSystem.adaptiveProgressBackground)
                 .frame(height: height)
             
             RoundedRectangle(cornerRadius: cornerRadius)
@@ -254,6 +258,146 @@ extension DesignSystem {
                 message: message.map { Text($0) },
                 dismissButton: primaryAction
             )
+        }
+    }
+    
+    // MARK: - エラーハンドリングUI
+    struct ErrorBanner: View {
+        let message: String
+        let type: ErrorType
+        let onDismiss: () -> Void
+        
+        enum ErrorType {
+            case error, warning, info
+            
+            var color: Color {
+                switch self {
+                case .error: return .red
+                case .warning: return .orange
+                case .info: return .blue
+                }
+            }
+            
+            var icon: String {
+                switch self {
+                case .error: return "exclamationmark.circle.fill"
+                case .warning: return "exclamationmark.triangle.fill"
+                case .info: return "info.circle.fill"
+                }
+            }
+        }
+        
+        var body: some View {
+            HStack(spacing: 12) {
+                Image(systemName: type.icon)
+                    .foregroundColor(type.color)
+                    .font(.system(size: 16, weight: .medium))
+                
+                Text(message)
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundColor(.primary)
+                    .multilineTextAlignment(.leading)
+                
+                Spacer()
+                
+                Button(action: onDismiss) {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundColor(Color(.systemGray3))
+                        .font(.system(size: 16))
+                }
+                .buttonStyle(PlainButtonStyle())
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+            .background(
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(Color(.systemBackground))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12)
+                            .stroke(type.color.opacity(0.3), lineWidth: 1)
+                    )
+            )
+            .shadow(color: adaptiveShadowColor, radius: 4, x: 0, y: 2)
+            .padding(.horizontal)
+        }
+    }
+    
+    // MARK: - ローディング状態
+    struct LoadingView: View {
+        let message: String
+        
+        var body: some View {
+            VStack(spacing: 16) {
+                ProgressView()
+                    .scaleEffect(1.2)
+                    .progressViewStyle(CircularProgressViewStyle())
+                
+                Text(message)
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundColor(.secondary)
+                    .multilineTextAlignment(.center)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(Color(.systemGroupedBackground))
+        }
+    }
+    
+    // MARK: - 空状態表示
+    struct EmptyStateView: View {
+        let icon: String
+        let title: String
+        let message: String
+        let actionTitle: String?
+        let action: (() -> Void)?
+        
+        init(
+            icon: String,
+            title: String,
+            message: String,
+            actionTitle: String? = nil,
+            action: (() -> Void)? = nil
+        ) {
+            self.icon = icon
+            self.title = title
+            self.message = message
+            self.actionTitle = actionTitle
+            self.action = action
+        }
+        
+        var body: some View {
+            VStack(spacing: 20) {
+                Image(systemName: icon)
+                    .font(.system(size: 50, weight: .light))
+                    .foregroundColor(.secondary)
+                
+                VStack(spacing: 8) {
+                    Text(title)
+                        .font(.title3)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.primary)
+                    
+                    Text(message)
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.center)
+                        .lineLimit(3)
+                }
+                
+                if let actionTitle = actionTitle, let action = action {
+                    Button(action: action) {
+                        Text(actionTitle)
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 24)
+                            .padding(.vertical, 12)
+                            .background(Color.blue)
+                            .cornerRadius(10)
+                    }
+                    .buttonStyle(PlainButtonStyle())
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(Color(.systemGroupedBackground))
         }
     }
 }

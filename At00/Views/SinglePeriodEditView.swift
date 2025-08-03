@@ -124,7 +124,7 @@ struct SinglePeriodEditView: View {
                 .background(
                     RoundedRectangle(cornerRadius: 16)
                         .fill(Color(.systemBackground))
-                        .shadow(color: .black.opacity(0.05), radius: 8, x: 0, y: 4)
+                        .shadow(color: DesignSystem.adaptiveShadowColor, radius: 8, x: 0, y: 4)
                 )
                 .padding(.horizontal)
                 

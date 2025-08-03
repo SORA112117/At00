@@ -287,7 +287,7 @@ struct PeriodTimeEditView: View {
                 .padding()
                 .background(Color(.systemBackground))
                 .cornerRadius(12)
-                .shadow(color: .black.opacity(0.05), radius: 4, x: 0, y: 2)
+                .shadow(color: DesignSystem.adaptiveShadowColor, radius: 4, x: 0, y: 2)
             }
             .padding()
             .navigationTitle("時間設定")

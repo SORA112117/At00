@@ -48,16 +48,8 @@ struct EditCourseDetailView: View {
         // ViewModelの初期化状態をチェック（NavigationViewなしで実装）
         Group {
             if !viewModel.isInitialized || viewModel.currentSemester == nil {
-                // 初期化中の表示
-                VStack {
-                    ProgressView()
-                        .scaleEffect(1.5)
-                        .padding()
-                    Text("読み込み中...")
-                        .foregroundColor(.secondary)
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(Color(.systemGroupedBackground))
+                // 統一されたローディング表示
+                DesignSystem.LoadingView(message: "読み込み中...")
             } else {
                 // メインコンテンツ
                 ScrollView {
@@ -176,7 +168,7 @@ struct EditCourseDetailView: View {
         .padding(16)
         .background(Color(.systemBackground))
         .cornerRadius(12)
-        .shadow(color: .black.opacity(0.05), radius: 4, x: 0, y: 2)
+        .shadow(color: DesignSystem.adaptiveShadowColor, radius: 4, x: 0, y: 2)
     }
     
     private var basicSettingsSection: some View {
@@ -210,7 +202,7 @@ struct EditCourseDetailView: View {
         .padding(16)
         .background(Color(.systemBackground))
         .cornerRadius(12)
-        .shadow(color: .black.opacity(0.05), radius: 4, x: 0, y: 2)
+        .shadow(color: DesignSystem.adaptiveShadowColor, radius: 4, x: 0, y: 2)
     }
     
     private var colorSelectionSection: some View {
@@ -242,7 +234,7 @@ struct EditCourseDetailView: View {
         .padding(16)
         .background(Color(.systemBackground))
         .cornerRadius(12)
-        .shadow(color: .black.opacity(0.05), radius: 4, x: 0, y: 2)
+        .shadow(color: DesignSystem.adaptiveShadowColor, radius: 4, x: 0, y: 2)
     }
     
     private var absenceRecordsSection: some View {
@@ -307,7 +299,7 @@ struct EditCourseDetailView: View {
         .padding(16)
         .background(Color(.systemBackground))
         .cornerRadius(12)
-        .shadow(color: .black.opacity(0.05), radius: 4, x: 0, y: 2)
+        .shadow(color: DesignSystem.adaptiveShadowColor, radius: 4, x: 0, y: 2)
     }
     
     private var deleteSection: some View {

@@ -9,9 +9,11 @@ import SwiftUI
 
 struct MainTabView: View {
     @State private var selectedTab = 0
+    @EnvironmentObject private var viewModel: AttendanceViewModel
     
     var body: some View {
-        TabView(selection: $selectedTab) {
+        ZStack {
+            TabView(selection: $selectedTab) {
             TimetableView()
                 .tabItem {
                     Image(systemName: "calendar")
@@ -38,8 +40,27 @@ struct MainTabView: View {
                 .tag(2)
                 .accessibilityLabel("設定タブ")
                 .accessibilityHint("アプリの設定を変更")
+            }
+            .accentColor(.blue)
+            
+            // エラーバナーをトップレベルに表示
+            VStack {
+                if let errorBanner = viewModel.errorBanner {
+                    DesignSystem.ErrorBanner(
+                        message: errorBanner.message,
+                        type: errorBanner.type,
+                        onDismiss: {
+                            viewModel.dismissErrorBanner()
+                        }
+                    )
+                    .transition(.move(edge: .top).combined(with: .opacity))
+                    .zIndex(999)
+                }
+                
+                Spacer()
+            }
+            .animation(.easeInOut(duration: 0.3), value: viewModel.errorBanner?.id)
         }
-        .accentColor(.blue)
     }
 }
 
