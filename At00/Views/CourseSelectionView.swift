@@ -106,6 +106,7 @@ struct CourseSelectionView: View {
                     Button("キャンセル") {
                         dismiss()
                     }
+                    .secondaryButtonStyle()
                 }
                 
                 ToolbarItem(placement: .navigationBarTrailing) {
@@ -113,16 +114,14 @@ struct CourseSelectionView: View {
                         Button("保存") {
                             saveNewCourse()
                         }
-                        .disabled(newCourseName.isEmpty)
-                        .fontWeight(.semibold)
+                        .primaryButtonStyle(isDisabled: newCourseName.isEmpty)
                     } else {
                         Button("保存") {
                             if let course = selectedExistingCourse {
                                 saveExistingCourse(course)
                             }
                         }
-                        .disabled(selectedExistingCourse == nil)
-                        .fontWeight(.semibold)
+                        .primaryButtonStyle(isDisabled: selectedExistingCourse == nil)
                     }
                 }
             }
@@ -182,7 +181,7 @@ struct CourseSelectionView: View {
             return
         }
         
-        viewModel.addCourse(
+        _ = viewModel.addCourse(
             name: newCourseName,
             dayOfWeek: dayOfWeek,
             period: period,

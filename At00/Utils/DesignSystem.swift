@@ -177,6 +177,18 @@ extension View {
     func sectionHeader(_ title: String) -> some View {
         modifier(DesignSystem.SectionHeader(title: title))
     }
+    
+    func primaryButtonStyle(isDisabled: Bool = false) -> some View {
+        modifier(DesignSystem.PrimaryButton(isDisabled: isDisabled))
+    }
+    
+    func secondaryButtonStyle() -> some View {
+        modifier(DesignSystem.SecondaryButton())
+    }
+    
+    func destructiveButtonStyle() -> some View {
+        modifier(DesignSystem.DestructiveButton())
+    }
 }
 
 // MARK: - Color Utilities
@@ -188,6 +200,61 @@ extension DesignSystem {
     
     static func getColorIndex(for color: Color) -> Int {
         return colorPalette.firstIndex(of: color) ?? 0
+    }
+    
+    // MARK: - 統一ボタンスタイル
+    struct PrimaryButton: ViewModifier {
+        let isDisabled: Bool
+        
+        init(isDisabled: Bool = false) {
+            self.isDisabled = isDisabled
+        }
+        
+        func body(content: Content) -> some View {
+            content
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundColor(isDisabled ? .secondary : .primary)
+                .disabled(isDisabled)
+        }
+    }
+    
+    struct SecondaryButton: ViewModifier {
+        func body(content: Content) -> some View {
+            content
+                .font(.system(size: 16, weight: .medium))
+                .foregroundColor(.secondary)
+        }
+    }
+    
+    struct DestructiveButton: ViewModifier {
+        func body(content: Content) -> some View {
+            content
+                .font(.system(size: 16, weight: .medium))
+                .foregroundColor(.red)
+        }
+    }
+    
+    // MARK: - 統一アラートスタイル
+    static func standardAlert(
+        title: String,
+        message: String? = nil,
+        primaryAction: Alert.Button,
+        secondaryAction: Alert.Button? = nil
+    ) -> Alert {
+        if let secondary = secondaryAction {
+            return Alert(
+                title: Text(title),
+                message: message.map { Text($0) },
+                primaryButton: primaryAction,
+                secondaryButton: secondary
+            )
+        } else {
+            return Alert(
+                title: Text(title),
+                message: message.map { Text($0) },
+                dismissButton: primaryAction
+            )
+        }
     }
 }
 

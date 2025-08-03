@@ -8,12 +8,14 @@
 import Foundation
 import CoreData
 import SwiftUI
+import UserNotifications
 
 // MARK: - データ更新通知
 extension Notification.Name {
     static let attendanceDataDidChange = Notification.Name("attendanceDataDidChange")
     static let courseDataDidChange = Notification.Name("courseDataDidChange")
     static let statisticsDataDidChange = Notification.Name("statisticsDataDidChange")
+    static let coreDataError = Notification.Name("coreDataError")
 }
 
 class AttendanceViewModel: ObservableObject {
@@ -27,6 +29,7 @@ class AttendanceViewModel: ObservableObject {
     
     let persistenceController: PersistenceController
     private let context: NSManagedObjectContext
+    private let notificationManager = NotificationManager.shared
     
     var managedObjectContext: NSManagedObjectContext {
         return context
@@ -36,19 +39,155 @@ class AttendanceViewModel: ObservableObject {
         self.persistenceController = persistenceController
         self.context = persistenceController.container.viewContext
         
-        // 初期化処理を順次実行し、確実に完了を確認
-        DispatchQueue.main.async {
+        // 初期化処理をバックグラウンドで実行
+        Task {
+            await initializeData()
+        }
+    }
+    
+    // 非同期初期化処理
+    @MainActor
+    private func initializeData() async {
+        // Core Data操作をバックグラウンドコンテキストで実行
+        await context.perform {
             self.setupSemesters()
             self.loadCurrentSemester()
             self.loadTimetable()
-            
-            // すべての初期化が完了してからフラグを設定
-            self.isInitialized = true
-            print("AttendanceViewModel initialization completed")
+        }
+        
+        // メインスレッドでUIを更新
+        self.isInitialized = true
+        self.objectWillChange.send()
+        print("AttendanceViewModel initialization completed")
+    }
+    
+    // 欠席数キャッシュ
+    @Published var absenceCountCache: [String: Int] = [:]
+    
+    // MARK: - 通知管理（重複回避）
+    private var pendingNotifications = Set<NotificationName>()
+    private var notificationTimer: Timer?
+    
+    // 統一通知送信（重複回避・バッチ処理）
+    private func scheduleNotification(_ notification: NotificationName) {
+        pendingNotifications.insert(notification)
+        
+        // 既存のタイマーをキャンセル
+        notificationTimer?.invalidate()
+        
+        // 短い遅延後にバッチ送信
+        notificationTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: false) { _ in
+            self.sendPendingNotifications()
+        }
+    }
+    
+    private func sendPendingNotifications() {
+        for notification in pendingNotifications {
+            NotificationCenter.default.post(name: notification.name, object: nil)
+        }
+        pendingNotifications.removeAll()
+    }
+    
+    // 通知種別の定義
+    private enum NotificationName: Hashable {
+        case courseData
+        case attendanceData
+        case statisticsData
+        
+        var name: Notification.Name {
+            switch self {
+            case .courseData: return .courseDataDidChange
+            case .attendanceData: return .attendanceDataDidChange
+            case .statisticsData: return .statisticsDataDidChange
+            }
         }
     }
     
     // MARK: - Public Methods
+    
+    // 時間割内のすべての授業の欠席数を一括取得（N+1クエリ回避）
+    func loadAllAbsenceCounts() {
+        // すべての授業名を収集
+        var courseNames = Set<String>()
+        for row in timetable {
+            for course in row {
+                if let name = course?.courseName {
+                    courseNames.insert(name)
+                }
+            }
+        }
+        
+        guard !courseNames.isEmpty else {
+            DispatchQueue.main.async {
+                self.absenceCountCache = [:]
+                self.objectWillChange.send()
+            }
+            return
+        }
+        
+        // 一つのクエリで全ての欠席記録を取得
+        let request: NSFetchRequest<AttendanceRecord> = AttendanceRecord.fetchRequest()
+        request.predicate = NSPredicate(
+            format: "course.courseName IN %@ AND type IN %@",
+            Array(courseNames),
+            AttendanceType.allCases.filter { $0.affectsCredit }.map { $0.rawValue }
+        )
+        request.relationshipKeyPathsForPrefetching = ["course"]
+        
+        do {
+            let allRecords = try context.fetch(request)
+            
+            // メモリ内で授業名ごとにグループ化
+            var newCache: [String: Int] = [:]
+            for courseName in courseNames {
+                newCache[courseName] = 0  // 初期化
+            }
+            
+            for record in allRecords {
+                if let courseName = record.course?.courseName {
+                    newCache[courseName, default: 0] += 1
+                }
+            }
+            
+            // UIの更新はメインスレッドで
+            DispatchQueue.main.async {
+                self.absenceCountCache = newCache
+                self.objectWillChange.send()
+            }
+        } catch {
+            print("欠席数一括取得エラー: \(error)")
+            DispatchQueue.main.async {
+                self.absenceCountCache = [:]
+                self.objectWillChange.send()
+            }
+        }
+    }
+    
+    // キャッシュから欠席数を取得（N+1クエリ回避）
+    func getCachedAbsenceCount(for course: Course) -> Int {
+        guard let courseName = course.courseName else { return 0 }
+        return absenceCountCache[courseName] ?? getAbsenceCount(for: course)
+    }
+    
+    // 授業名から欠席数を取得（内部用）
+    private func getAbsenceCountForCourseName(_ courseName: String) -> Int {
+        let sameCourses = getAllCoursesWithSameName(courseName)
+        let courseIds = sameCourses.map { $0.objectID }
+        
+        let request: NSFetchRequest<AttendanceRecord> = AttendanceRecord.fetchRequest()
+        request.predicate = NSPredicate(
+            format: "course IN %@ AND type IN %@",
+            courseIds,
+            AttendanceType.allCases.filter { $0.affectsCredit }.map { $0.rawValue }
+        )
+        
+        do {
+            return try context.count(for: request)
+        } catch {
+            print("欠席回数取得エラー: \(error)")
+            return 0
+        }
+    }
     
     // 現在の学期を読み込み
     func loadCurrentSemester() {
@@ -92,115 +231,206 @@ class AttendanceViewModel: ObservableObject {
                     timetable[periodIndex][dayIndex] = course
                 }
             }
+            
+            // 時間割読み込み後に欠席数キャッシュも更新
+            loadAllAbsenceCounts()
+            
+            // 授業リマインダー通知を更新
+            updateClassReminders()
         } catch {
             errorMessage = "時間割の読み込みに失敗しました: \(error.localizedDescription)"
         }
     }
     
-    // 欠席を記録（同一名授業にも同期）
-    func recordAbsence(for course: Course, type: AttendanceType = .absent, memo: String = "") {
-        guard let courseName = course.courseName, 
-              let semester = course.semester else { return }
-        
-        // 同一名の全ての授業を取得
-        let request: NSFetchRequest<Course> = Course.fetchRequest()
-        request.predicate = NSPredicate(format: "courseName == %@ AND semester == %@", courseName, semester)
-        
-        do {
-            let sameCourses = try context.fetch(request)
-            
-            // 同一名の全ての授業に欠席記録を追加
-            for sameCourse in sameCourses {
-                let record = AttendanceRecord(context: context)
-                record.recordId = UUID()
-                record.course = sameCourse
-                record.date = Date()
-                record.type = type.rawValue
-                record.memo = memo
-                record.createdAt = Date()
-            }
-            
-            saveContext()
-            
-            // 統計データの更新を通知
-            NotificationCenter.default.post(name: .attendanceDataDidChange, object: nil)
-            NotificationCenter.default.post(name: .statisticsDataDidChange, object: nil)
-        } catch {
-            errorMessage = "欠席記録の保存に失敗しました: \(error.localizedDescription)"
-        }
+    // 欠席記録の結果
+    enum RecordResult {
+        case success
+        case alreadyRecorded
+        case dailyLimitReached
     }
     
-    // 最後の記録を取り消し（同一名授業からも同期）
-    func undoLastRecord(for course: Course) {
-        guard let courseName = course.courseName,
-              let semester = course.semester else { return }
+    // 欠席を記録（代表的なCourseに1つのみ作成）
+    func recordAbsence(for course: Course, type: AttendanceType = .absent, memo: String = "", date: Date = Date()) -> RecordResult {
+        guard let courseName = course.courseName else { return .alreadyRecorded }
         
-        // 同一名の全ての授業を取得
-        let courseRequest: NSFetchRequest<Course> = Course.fetchRequest()
-        courseRequest.predicate = NSPredicate(format: "courseName == %@ AND semester == %@", courseName, semester)
+        let calendar = Calendar.current
+        _ = calendar.startOfDay(for: date)
         
-        do {
-            let sameCourses = try context.fetch(courseRequest)
-            
-            // 同一名授業の最新記録を取得して削除
-            for sameCourse in sameCourses {
-                let request: NSFetchRequest<AttendanceRecord> = AttendanceRecord.fetchRequest()
-                request.predicate = NSPredicate(format: "course == %@", sameCourse)
-                request.sortDescriptors = [NSSortDescriptor(keyPath: \AttendanceRecord.createdAt, ascending: false)]
-                request.fetchLimit = 1
-                
-                let records = try context.fetch(request)
-                if let lastRecord = records.first {
-                    context.delete(lastRecord)
-                }
+        // 複数コマ登録の場合の1日上限チェック
+        let courseCount = getCourseCountWithSameName(courseName)
+        let todayRecordCount = getRecordCountForSameDay(courseName: courseName, date: date)
+        
+        if todayRecordCount >= courseCount {
+            print("同名科目の1日の記録上限に達しています（\(todayRecordCount)/\(courseCount)）")
+            return .dailyLimitReached // 上限到達を返す
+        }
+        
+        // 同名科目の代表的なCourse（最初の1つ）に記録を作成
+        let sameCourses = getAllCoursesWithSameName(courseName)
+        guard let representativeCourse = sameCourses.first else { return .alreadyRecorded }
+        
+        let record = AttendanceRecord(context: context)
+        record.recordId = UUID()
+        record.course = representativeCourse
+        record.date = date
+        record.type = type.rawValue
+        record.memo = memo
+        record.createdAt = Date()
+        
+        saveContext()
+        
+        // キャッシュを更新
+        if let courseName = course.courseName {
+            let newCount = getAbsenceCountForCourseName(courseName)
+            DispatchQueue.main.async {
+                self.absenceCountCache[courseName] = newCount
             }
             
-            saveContext()
+            // 欠席上限アラート通知をチェック・送信
+            checkAndSendAbsenceLimitNotification(for: course, newAbsenceCount: newCount)
+        }
+        
+        // 統計データの更新を通知（統一システム）
+        scheduleNotification(.attendanceData)
+        scheduleNotification(.statisticsData)
+        
+        return .success // 記録成功を返す
+    }
+    
+    // 最後の記録を取り消し（同名科目の最新記録を削除）
+    func undoLastRecord(for course: Course) {
+        guard let courseName = course.courseName else { return }
+        
+        // 同名科目の最新記録を1つ取得して削除
+        let request: NSFetchRequest<AttendanceRecord> = AttendanceRecord.fetchRequest()
+        let sameCourses = getAllCoursesWithSameName(courseName)
+        let courseIds = sameCourses.map { $0.objectID }
+        
+        request.predicate = NSPredicate(
+            format: "course IN %@ AND type IN %@",
+            courseIds,
+            AttendanceType.allCases.filter { $0.affectsCredit }.map { $0.rawValue }
+        )
+        request.sortDescriptors = [NSSortDescriptor(keyPath: \AttendanceRecord.date, ascending: false)]
+        request.fetchLimit = 1
+        
+        do {
+            let latestRecords = try context.fetch(request)
+            guard let latestRecord = latestRecords.first else { 
+                print("削除対象の記録が見つかりません: \(courseName)")
+                return 
+            }
             
-            // 統計データの更新を通知
-            NotificationCenter.default.post(name: .attendanceDataDidChange, object: nil)
-            NotificationCenter.default.post(name: .statisticsDataDidChange, object: nil)
+            // 削除前に関連データを保存
+            let deletedCourse = latestRecord.course
+            let wasFullYear = deletedCourse?.isFullYear ?? false
+            let recordDate = latestRecord.date
+            
+            // 記録を削除
+            context.delete(latestRecord)
+            
+            // 通年科目の場合、ペア学期の同じ日付の記録も削除
+            if wasFullYear, let deletedCourse = deletedCourse, let recordDate = recordDate {
+                deletePairSemesterRecord(course: deletedCourse, date: recordDate)
+            }
+            
+            // Core Dataの保存を安全に実行
+            do {
+                try context.save()
+                print("記録削除成功: \(courseName)")
+            } catch {
+                print("記録削除保存エラー: \(error)")
+                errorMessage = "記録の取り消しに失敗しました: \(error.localizedDescription)"
+                return
+            }
+            
+            // キャッシュを安全に更新
+            DispatchQueue.main.async {
+                let newCount = self.getAbsenceCountForCourseName(courseName)
+                self.absenceCountCache[courseName] = newCount
+                
+                // UI更新の通知を送信（統一システム）
+                self.scheduleNotification(.attendanceData)
+                self.scheduleNotification(.statisticsData)
+            }
+            
         } catch {
+            print("記録削除フェッチエラー: \(error)")
             errorMessage = "記録の取り消しに失敗しました: \(error.localizedDescription)"
         }
     }
     
-    // 授業の欠席回数を取得
+    // 通年科目のペア学期の同じ日付の記録を削除
+    private func deletePairSemesterRecord(course: Course, date: Date) {
+        guard let courseName = course.courseName,
+              let currentSemester = course.semester else {
+            return
+        }
+        
+        // ペア学期を取得
+        guard let pairSemester = findPairSemester(for: currentSemester) else {
+            return
+        }
+        
+        // ペア学期の同じ科目を取得
+        let pairCourse = getCourseInSemester(
+            courseName: courseName,
+            dayOfWeek: Int(course.dayOfWeek),
+            period: Int(course.period),
+            semester: pairSemester
+        )
+        
+        guard let pairCourse = pairCourse else {
+            return
+        }
+        
+        // 同じ日付の記録を検索
+        let request: NSFetchRequest<AttendanceRecord> = AttendanceRecord.fetchRequest()
+        let calendar = Calendar.current
+        let startOfDay = calendar.startOfDay(for: date)
+        guard let endOfDay = calendar.date(byAdding: .day, value: 1, to: startOfDay) else {
+            print("日付計算エラー: endOfDay作成失敗")
+            return
+        }
+        
+        request.predicate = NSPredicate(
+            format: "course == %@ AND date >= %@ AND date < %@",
+            pairCourse,
+            startOfDay as NSDate,
+            endOfDay as NSDate
+        )
+        
+        do {
+            let records = try context.fetch(request)
+            for record in records {
+                context.delete(record)
+                print("通年科目ペア記録削除: \(courseName) - \(pairSemester.name ?? "")")
+            }
+        } catch {
+            print("ペア学期記録削除エラー: \(error)")
+        }
+    }
+    
+    // 授業の欠席回数を取得（同名科目統合）
     func getAbsenceCount(for course: Course) -> Int {
-        // 通年科目の場合は前期・後期両方の欠席記録を合算
-        if course.isFullYear, let courseName = course.courseName {
-            let request: NSFetchRequest<AttendanceRecord> = AttendanceRecord.fetchRequest()
-            
-            // 同じ名前の全ての授業（前期・後期含む）の欠席記録を取得
-            let courseRequest: NSFetchRequest<Course> = Course.fetchRequest()
-            courseRequest.predicate = NSPredicate(format: "courseName == %@", courseName)
-            
-            do {
-                let allCourses = try context.fetch(courseRequest)
-                let courseIds = allCourses.map { $0.objectID }
-                
-                request.predicate = NSPredicate(
-                    format: "course IN %@ AND type IN %@",
-                    courseIds,
-                    AttendanceType.allCases.filter { $0.affectsCredit }.map { $0.rawValue }
-                )
-                
-                return try context.count(for: request)
-            } catch {
-                return 0
-            }
-        } else {
-            // 通常科目の場合は従来通り
-            let request: NSFetchRequest<AttendanceRecord> = AttendanceRecord.fetchRequest()
-            request.predicate = NSPredicate(format: "course == %@ AND type IN %@", 
-                                          course, 
-                                          AttendanceType.allCases.filter { $0.affectsCredit }.map { $0.rawValue })
-            
-            do {
-                return try context.count(for: request)
-            } catch {
-                return 0
-            }
+        guard let courseName = course.courseName else { return 0 }
+        
+        // 同名科目の全ての記録を取得（代表Course方式なので重複はないはず）
+        let sameCourses = getAllCoursesWithSameName(courseName)
+        let courseIds = sameCourses.map { $0.objectID }
+        
+        let request: NSFetchRequest<AttendanceRecord> = AttendanceRecord.fetchRequest()
+        request.predicate = NSPredicate(
+            format: "course IN %@ AND type IN %@",
+            courseIds,
+            AttendanceType.allCases.filter { $0.affectsCredit }.map { $0.rawValue }
+        )
+        
+        do {
+            return try context.count(for: request)
+        } catch {
+            print("欠席回数取得エラー: \(error)")
+            return 0
         }
     }
     
@@ -224,13 +454,92 @@ class AttendanceViewModel: ObservableObject {
         }
     }
     
+    // 同名科目が既に存在するかチェック
+    func hasCourseWithSameName(_ courseName: String) -> Bool {
+        guard let semester = currentSemester else { return false }
+        
+        let request: NSFetchRequest<Course> = Course.fetchRequest()
+        request.predicate = NSPredicate(format: "courseName == %@ AND semester == %@", courseName, semester)
+        request.fetchLimit = 1
+        
+        do {
+            let count = try context.count(for: request)
+            return count > 0
+        } catch {
+            return false
+        }
+    }
+    
+    // 同名科目の総数を取得
+    func getCourseCountWithSameName(_ courseName: String) -> Int {
+        guard let semester = currentSemester else { return 0 }
+        
+        let request: NSFetchRequest<Course> = Course.fetchRequest()
+        request.predicate = NSPredicate(format: "courseName == %@ AND semester == %@", courseName, semester)
+        
+        do {
+            return try context.count(for: request)
+        } catch {
+            return 0
+        }
+    }
+    
+    // 指定日に記録された同名科目の欠席記録数を取得
+    func getRecordCountForSameDay(courseName: String, date: Date) -> Int {
+        let calendar = Calendar.current
+        let dayStart = calendar.startOfDay(for: date)
+        guard let dayEnd = calendar.date(byAdding: .day, value: 1, to: dayStart) else {
+            print("日付計算エラー: dayEnd作成失敗")
+            return 0
+        }
+        
+        let courses = getAllCoursesWithSameName(courseName)
+        let courseIds = courses.map { $0.objectID }
+        
+        let request: NSFetchRequest<AttendanceRecord> = AttendanceRecord.fetchRequest()
+        request.predicate = NSPredicate(
+            format: "course IN %@ AND date >= %@ AND date < %@ AND type IN %@",
+            courseIds,
+            dayStart as NSDate,
+            dayEnd as NSDate,
+            AttendanceType.allCases.filter { $0.affectsCredit }.map { $0.rawValue }
+        )
+        
+        do {
+            return try context.count(for: request)
+        } catch {
+            return 0
+        }
+    }
+    
+    // 授業追加結果
+    enum AddCourseResult {
+        case success
+        case currentSlotOccupied
+        case otherSemesterSlotOccupied
+        case bothSlotsOccupied
+    }
+    
     // 新しい授業を追加
-    func addCourse(name: String, dayOfWeek: Int, period: Int, totalClasses: Int = 15, isFullYear: Bool = false, colorIndex: Int = 0) {
-        guard let semester = currentSemester else { return }
+    func addCourse(name: String, dayOfWeek: Int, period: Int, totalClasses: Int = 15, isFullYear: Bool = false, colorIndex: Int = 0) -> AddCourseResult {
+        guard let semester = currentSemester else { return .currentSlotOccupied }
         
-        // 同名の既存授業を確認して欠席記録を取得
-        let existingRecords = getExistingAbsenceRecords(for: name, in: semester)
+        // 現在の学期の指定位置に既に授業があるかチェック
+        if hasCourseBySemesterAndPosition(semester: semester, dayOfWeek: dayOfWeek, period: period) {
+            return .currentSlotOccupied
+        }
         
+        // 通年科目の場合、もう一方の学期の同じ位置もチェック
+        if isFullYear {
+            let otherType: SemesterType = (currentSemesterType == .firstHalf) ? .secondHalf : .firstHalf
+            if let otherSemester = availableSemesters.first(where: { $0.semesterType == otherType.rawValue }) {
+                if hasCourseBySemesterAndPosition(semester: otherSemester, dayOfWeek: dayOfWeek, period: period) {
+                    return .otherSemesterSlotOccupied
+                }
+            }
+        }
+        
+        // 現在の学期に授業を追加
         let course = Course(context: context)
         course.courseId = UUID()
         course.courseName = name
@@ -242,17 +551,6 @@ class AttendanceViewModel: ObservableObject {
         course.isNotificationEnabled = true
         course.isFullYear = isFullYear
         course.colorIndex = Int16(colorIndex)
-        
-        // 既存の欠席記録を新しい授業にも適用
-        for record in existingRecords {
-            let newRecord = AttendanceRecord(context: context)
-            newRecord.recordId = UUID()
-            newRecord.course = course
-            newRecord.date = record.date
-            newRecord.type = record.type
-            newRecord.memo = record.memo
-            newRecord.createdAt = record.createdAt
-        }
         
         // 通年科目の場合、もう一方の学期にも同じ授業を追加
         if isFullYear {
@@ -275,38 +573,42 @@ class AttendanceViewModel: ObservableObject {
         saveContext()
         loadTimetable()
         
+        // 通年科目の場合は同期を実行
+        if isFullYear {
+            syncFullYearCourses()
+        }
+        
         // コースデータの更新を通知
         NotificationCenter.default.post(name: .courseDataDidChange, object: nil)
         NotificationCenter.default.post(name: .statisticsDataDidChange, object: nil)
+        
+        return .success
     }
     
-    // 同名授業の既存欠席記録を取得
-    private func getExistingAbsenceRecords(for courseName: String, in semester: Semester) -> [AttendanceRecord] {
-        let courseRequest: NSFetchRequest<Course> = Course.fetchRequest()
-        courseRequest.predicate = NSPredicate(format: "courseName == %@ AND semester == %@", courseName, semester)
-        courseRequest.fetchLimit = 1
+    // 指定した学期・位置に既に授業が存在するかチェック
+    private func hasCourseBySemesterAndPosition(semester: Semester, dayOfWeek: Int, period: Int) -> Bool {
+        let request: NSFetchRequest<Course> = Course.fetchRequest()
+        request.predicate = NSPredicate(
+            format: "semester == %@ AND dayOfWeek == %@ AND period == %@",
+            semester,
+            NSNumber(value: dayOfWeek),
+            NSNumber(value: period)
+        )
+        request.fetchLimit = 1
         
         do {
-            let courses = try context.fetch(courseRequest)
-            guard let existingCourse = courses.first else { return [] }
-            
-            let recordRequest: NSFetchRequest<AttendanceRecord> = AttendanceRecord.fetchRequest()
-            recordRequest.predicate = NSPredicate(format: "course == %@", existingCourse)
-            recordRequest.sortDescriptors = [NSSortDescriptor(keyPath: \AttendanceRecord.createdAt, ascending: true)]
-            
-            return try context.fetch(recordRequest)
+            let count = try context.count(for: request)
+            return count > 0
         } catch {
-            return []
+            print("授業存在チェックエラー: \(error)")
+            return false
         }
     }
     
+    
     // 既存授業を新しい時間割位置に配置
     func assignExistingCourse(course: Course, newDayOfWeek: Int, newPeriod: Int) {
-        guard let semester = currentSemester,
-              let courseName = course.courseName else { return }
-        
-        // 同名の既存授業の欠席記録を取得
-        let existingRecords = getExistingAbsenceRecords(for: courseName, in: semester)
+        guard let semester = currentSemester else { return }
         
         // 既存の授業の複製を作成
         let newCourse = Course(context: context)
@@ -321,16 +623,8 @@ class AttendanceViewModel: ObservableObject {
         newCourse.isFullYear = course.isFullYear
         newCourse.colorIndex = course.colorIndex
         
-        // 既存の欠席記録を新しい授業にも適用
-        for record in existingRecords {
-            let newRecord = AttendanceRecord(context: context)
-            newRecord.recordId = UUID()
-            newRecord.course = newCourse
-            newRecord.date = record.date
-            newRecord.type = record.type
-            newRecord.memo = record.memo
-            newRecord.createdAt = record.createdAt
-        }
+        // 注意: 欠席記録は代表的なCourse方式により、既存の記録をそのまま参照する
+        // 新しい記録のコピーは作成しない（重複を避けるため）
         
         // 通年科目の場合、もう一方の学期にも配置
         if course.isFullYear {
@@ -360,15 +654,26 @@ class AttendanceViewModel: ObservableObject {
     
     // 授業を削除（同名科目と関連データをすべて削除）
     func deleteCourse(_ course: Course) {
+        // 通年科目の場合は同期削除を実行
+        if course.isFullYear {
+            deleteFullYearCourseFromPair(course: course)
+        }
+        
+        // 単一のコースのみ削除（同名の他のコマは残す）
+        context.delete(course)
+        saveContext()
+        loadTimetable()
+        
+        // コースデータの更新を通知
+        NotificationCenter.default.post(name: .courseDataDidChange, object: nil)
+        NotificationCenter.default.post(name: .statisticsDataDidChange, object: nil)
+        NotificationCenter.default.post(name: .attendanceDataDidChange, object: nil)
+    }
+    
+    // 同名授業をすべて削除する場合の専用メソッド
+    func deleteAllCoursesWithSameName(_ course: Course) {
         guard let courseName = course.courseName else {
-            // 単一のコースのみ削除
-            context.delete(course)
-            saveContext()
-            loadTimetable()
-            
-            // コースデータの更新を通知
-            NotificationCenter.default.post(name: .courseDataDidChange, object: nil)
-            NotificationCenter.default.post(name: .statisticsDataDidChange, object: nil)
+            deleteCourse(course)
             return
         }
         
@@ -400,15 +705,33 @@ class AttendanceViewModel: ObservableObject {
             // コースデータの更新を通知
             NotificationCenter.default.post(name: .courseDataDidChange, object: nil)
             NotificationCenter.default.post(name: .statisticsDataDidChange, object: nil)
+            NotificationCenter.default.post(name: .attendanceDataDidChange, object: nil)
             
         } catch {
             errorMessage = "授業の削除に失敗しました: \(error.localizedDescription)"
         }
     }
     
+    // 欠席記録を日付指定で追加（同名科目に完全同期）
+    func addAbsenceRecord(for course: Course, date: Date, type: AttendanceType = .absent, memo: String = "手動追加") {
+        _ = recordAbsence(for: course, type: type, memo: memo, date: date)
+    }
+    
     // データを保存（外部からアクセス可能）
     func save() {
         saveContext()
+        
+        // 保存時に関連する通知を送信
+        NotificationCenter.default.post(name: .courseDataDidChange, object: nil)
+        NotificationCenter.default.post(name: .attendanceDataDidChange, object: nil)
+        NotificationCenter.default.post(name: .statisticsDataDidChange, object: nil)
+    }
+    
+    // 統一的な通知送信メソッド
+    private func sendDataChangeNotifications() {
+        NotificationCenter.default.post(name: .courseDataDidChange, object: nil)
+        NotificationCenter.default.post(name: .attendanceDataDidChange, object: nil)
+        NotificationCenter.default.post(name: .statisticsDataDidChange, object: nil)
     }
     
     // 指定した学期の時間割をリセット
@@ -468,6 +791,33 @@ class AttendanceViewModel: ObservableObject {
         currentSemesterType = type
         loadSemesterByType(type)
         loadTimetable()
+    }
+    
+    // 特定の学期シートに切り替える
+    func switchToSemester(_ semester: Semester) {
+        // 現在の学期をアクティブでなくする
+        if let current = currentSemester {
+            current.isActive = false
+        }
+        
+        // 新しい学期をアクティブにする
+        semester.isActive = true
+        currentSemester = semester
+        
+        // 学期タイプも更新
+        if let semesterTypeString = semester.semesterType,
+           let semesterType = SemesterType(rawValue: semesterTypeString) {
+            currentSemesterType = semesterType
+        }
+        
+        // 時間割を再読み込み
+        loadTimetable()
+        
+        // 変更を保存
+        save()
+        
+        // 通知を送信
+        NotificationCenter.default.post(name: .courseDataDidChange, object: nil)
     }
     
     // 学期の初期設定
@@ -552,11 +902,307 @@ class AttendanceViewModel: ObservableObject {
     
     // MARK: - Private Methods
     
+    // 同名科目の全てのCourseを取得
+    private func getAllCoursesWithSameName(_ courseName: String) -> [Course] {
+        let request: NSFetchRequest<Course> = Course.fetchRequest()
+        request.predicate = NSPredicate(format: "courseName == %@", courseName)
+        
+        do {
+            return try context.fetch(request)
+        } catch {
+            print("同名科目の取得エラー: \(error)")
+            return []
+        }
+    }
+    
+    // 指定した科目名・日付範囲に記録が存在するかチェック
+    private func hasAbsenceRecord(courseName: String, startDate: Date, endDate: Date) -> Bool {
+        let courses = getAllCoursesWithSameName(courseName)
+        let courseIds = courses.map { $0.objectID }
+        
+        let request: NSFetchRequest<AttendanceRecord> = AttendanceRecord.fetchRequest()
+        request.predicate = NSPredicate(
+            format: "course IN %@ AND date >= %@ AND date < %@ AND type IN %@",
+            courseIds,
+            startDate as NSDate,
+            endDate as NSDate,
+            AttendanceType.allCases.filter { $0.affectsCredit }.map { $0.rawValue }
+        )
+        request.fetchLimit = 1
+        
+        do {
+            let count = try context.count(for: request)
+            return count > 0
+        } catch {
+            print("記録存在チェックエラー: \(error)")
+            return false
+        }
+    }
+    
+    // 保存タイマー（バッチ保存用）
+    private var saveTimer: Timer?
+    
     private func saveContext() {
         do {
             try context.save()
         } catch {
             errorMessage = "データの保存に失敗しました: \(error.localizedDescription)"
+            
+            // エラー通知を送信
+            NotificationCenter.default.post(
+                name: .coreDataError,
+                object: nil,
+                userInfo: ["error": error]
+            )
+        }
+    }
+    
+    // 遅延保存（複数の変更を一度に保存）
+    private func saveContextDelayed() {
+        // 既存のタイマーをキャンセル
+        saveTimer?.invalidate()
+        
+        // 0.5秒後に保存
+        saveTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: false) { _ in
+            self.saveContext()
+            self.sendDataChangeNotifications()
+        }
+    }
+    
+    // MARK: - 通知関連メソッド
+    
+    /// 欠席上限アラート通知をチェック・送信
+    private func checkAndSendAbsenceLimitNotification(for course: Course, newAbsenceCount: Int) {
+        guard let courseName = course.courseName else { return }
+        
+        let maxAbsences = Int(course.maxAbsences)
+        let remainingAbsences = max(0, maxAbsences - newAbsenceCount)
+        
+        // 上限到達または警告範囲（残り2回以下）の場合に通知
+        if remainingAbsences <= 2 {
+            notificationManager.scheduleAbsenceLimitWarning(
+                courseName: courseName,
+                currentAbsences: newAbsenceCount,
+                maxAbsences: maxAbsences,
+                remainingAbsences: remainingAbsences
+            )
+        }
+    }
+    
+    /// 授業リマインダー通知を更新
+    func updateClassReminders() {
+        // 現在の時間割から全授業を取得
+        var allCourses: [Course] = []
+        for row in timetable {
+            for course in row {
+                if let course = course {
+                    allCourses.append(course)
+                }
+            }
+        }
+        
+        // 授業開始前リマインダーをスケジュール
+        notificationManager.scheduleClassReminders(for: allCourses)
+    }
+    
+    /// リマインダー通知設定を更新
+    func updateReminderNotifications() {
+        notificationManager.scheduleReminderNotifications()
+    }
+    
+    /// 通知権限を確認・リクエスト
+    func requestNotificationPermission() async -> Bool {
+        return await notificationManager.requestPermission()
+    }
+    
+    /// 全ての通知をキャンセル
+    func cancelAllNotifications() {
+        notificationManager.cancelAllNotifications()
+    }
+    
+    // MARK: - 通年科目同期機能
+    
+    /// 通年科目を同期（ペア学期間での科目追加・削除・更新）
+    func syncFullYearCourses() {
+        // 利用可能な全学期を取得
+        let allSemesters = availableSemesters
+        
+        // 年度別・学期タイプ別にグループ化
+        var semesterGroups: [Int: [SemesterType: Semester]] = [:]
+        
+        for semester in allSemesters {
+            guard let semesterTypeString = semester.semesterType,
+                  let semesterType = SemesterType(rawValue: semesterTypeString),
+                  let startDate = semester.startDate else {
+                continue
+            }
+            
+            let year = Calendar.current.component(.year, from: startDate)
+            
+            if semesterGroups[year] == nil {
+                semesterGroups[year] = [:]
+            }
+            semesterGroups[year]?[semesterType] = semester
+        }
+        
+        // 各年度のペアについて通年科目を同期
+        for (_, semesters) in semesterGroups {
+            guard let firstHalf = semesters[.firstHalf],
+                  let secondHalf = semesters[.secondHalf] else {
+                continue // ペアが揃っていない場合はスキップ
+            }
+            
+            syncFullYearCoursesForPair(firstHalf: firstHalf, secondHalf: secondHalf)
+        }
+    }
+    
+    /// ペア学期間での通年科目同期
+    private func syncFullYearCoursesForPair(firstHalf: Semester, secondHalf: Semester) {
+        // 前期の通年科目を取得
+        let firstHalfFullYearCourses = getFullYearCourses(for: firstHalf)
+        
+        // 後期の通年科目を取得
+        let secondHalfFullYearCourses = getFullYearCourses(for: secondHalf)
+        
+        var hasChanges = false
+        
+        // 前期の通年科目を後期に同期
+        for firstHalfCourse in firstHalfFullYearCourses {
+            if syncCourseToOtherSemester(course: firstHalfCourse, targetSemester: secondHalf) {
+                hasChanges = true
+            }
+        }
+        
+        // 後期の通年科目を前期に同期
+        for secondHalfCourse in secondHalfFullYearCourses {
+            if syncCourseToOtherSemester(course: secondHalfCourse, targetSemester: firstHalf) {
+                hasChanges = true
+            }
+        }
+        
+        // 変更があった場合のみ保存
+        if hasChanges {
+            saveContext()
+            print("通年科目同期完了: \(firstHalf.name ?? "前期") ⇔ \(secondHalf.name ?? "後期")")
+        }
+    }
+    
+    /// 指定学期の通年科目を取得
+    private func getFullYearCourses(for semester: Semester) -> [Course] {
+        let request: NSFetchRequest<Course> = Course.fetchRequest()
+        request.predicate = NSPredicate(format: "semester == %@ AND isFullYear == true", semester)
+        
+        do {
+            return try context.fetch(request)
+        } catch {
+            print("通年科目取得エラー: \(error)")
+            return []
+        }
+    }
+    
+    /// 科目を他の学期に同期
+    @discardableResult
+    private func syncCourseToOtherSemester(course: Course, targetSemester: Semester) -> Bool {
+        guard let courseName = course.courseName else { return false }
+        
+        // 対象学期に同じ科目が既に存在するかチェック
+        let existingCourse = getCourseInSemester(
+            courseName: courseName,
+            dayOfWeek: Int(course.dayOfWeek),
+            period: Int(course.period),
+            semester: targetSemester
+        )
+        
+        if existingCourse == nil {
+            // 存在しない場合は新規作成
+            let newCourse = Course(context: context)
+            newCourse.courseId = UUID()
+            newCourse.courseName = course.courseName
+            newCourse.dayOfWeek = course.dayOfWeek
+            newCourse.period = course.period
+            newCourse.totalClasses = course.totalClasses
+            newCourse.maxAbsences = course.maxAbsences
+            newCourse.semester = targetSemester
+            newCourse.isNotificationEnabled = course.isNotificationEnabled
+            newCourse.isFullYear = course.isFullYear
+            newCourse.colorIndex = course.colorIndex
+            
+            print("通年科目同期: \(courseName) を \(targetSemester.name ?? "") に追加")
+            return true
+        }
+        
+        return false
+    }
+    
+    /// 指定学期・位置・科目名の科目を取得
+    private func getCourseInSemester(courseName: String, dayOfWeek: Int, period: Int, semester: Semester) -> Course? {
+        let request: NSFetchRequest<Course> = Course.fetchRequest()
+        request.predicate = NSPredicate(
+            format: "courseName == %@ AND dayOfWeek == %@ AND period == %@ AND semester == %@",
+            courseName,
+            NSNumber(value: dayOfWeek),
+            NSNumber(value: period),
+            semester
+        )
+        request.fetchLimit = 1
+        
+        do {
+            return try context.fetch(request).first
+        } catch {
+            print("科目検索エラー: \(error)")
+            return nil
+        }
+    }
+    
+    /// 通年科目の削除同期
+    func deleteFullYearCourseFromPair(course: Course) {
+        guard course.isFullYear,
+              let courseName = course.courseName,
+              let currentSemester = course.semester else {
+            return
+        }
+        
+        // ペア学期を見つける
+        guard let pairSemester = findPairSemester(for: currentSemester) else {
+            return
+        }
+        
+        // ペア学期の同じ科目を削除
+        let pairCourse = getCourseInSemester(
+            courseName: courseName,
+            dayOfWeek: Int(course.dayOfWeek),
+            period: Int(course.period),
+            semester: pairSemester
+        )
+        
+        if let pairCourse = pairCourse {
+            context.delete(pairCourse)
+            saveContext()
+            print("通年科目同期削除: \(courseName) を \(pairSemester.name ?? "") から削除")
+        }
+    }
+    
+    /// ペア学期を検索
+    private func findPairSemester(for semester: Semester) -> Semester? {
+        guard let semesterTypeString = semester.semesterType,
+              let semesterType = SemesterType(rawValue: semesterTypeString),
+              let startDate = semester.startDate else {
+            return nil
+        }
+        
+        let year = Calendar.current.component(.year, from: startDate)
+        let pairSemesterType: SemesterType = (semesterType == .firstHalf) ? .secondHalf : .firstHalf
+        
+        return availableSemesters.first { otherSemester in
+            guard let otherSemesterTypeString = otherSemester.semesterType,
+                  let otherSemesterType = SemesterType(rawValue: otherSemesterTypeString),
+                  otherSemesterType == pairSemesterType,
+                  let otherStartDate = otherSemester.startDate else {
+                return false
+            }
+            
+            let otherYear = Calendar.current.component(.year, from: otherStartDate)
+            return otherYear == year
         }
     }
 }

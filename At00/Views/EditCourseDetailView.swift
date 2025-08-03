@@ -19,9 +19,18 @@ struct EditCourseDetailView: View {
     @State private var selectedColorIndex: Int
     @State private var isFullYear: Bool
     @State private var absenceRecords: [AttendanceRecord] = []
-    @State private var showingDeleteAlert = false
-    @State private var recordToDelete: AttendanceRecord?
-    @State private var deletedRecords: Set<AttendanceRecord> = []
+    @State private var tempAddedRecords: [TempAbsenceRecord] = [] // 一時的に追加された記録
+    @State private var deletedRecords: Set<AttendanceRecord> = [] // 削除予定の記録
+    @State private var selectedAbsenceDate: Date = Date()
+    @State private var showingAddAbsenceAlert = false
+    
+    // 一時的な欠席記録の構造体
+    struct TempAbsenceRecord: Identifiable {
+        let id = UUID()
+        let date: Date
+        let type: AttendanceType
+        let memo: String
+    }
     
     init(course: Course, viewModel: AttendanceViewModel) {
         self.course = course
@@ -76,14 +85,26 @@ struct EditCourseDetailView: View {
         }
         .navigationTitle("授業編集")
         .navigationBarTitleDisplayMode(.inline)
+        .sheet(isPresented: $showingAddAbsenceAlert) {
+            AddAbsenceRecordSheet(
+                selectedDate: $selectedAbsenceDate,
+                onAdd: {
+                    addAbsenceRecord()
+                    showingAddAbsenceAlert = false
+                },
+                onCancel: {
+                    showingAddAbsenceAlert = false
+                }
+            )
+        }
         .toolbar {
             ToolbarItem(placement: .navigationBarLeading) {
                 Button("キャンセル") {
-                    // 削除予定の記録をリセット
-                    deletedRecords.removeAll()
+                    // 全ての一時的変更を破棄
+                    discardTempChanges()
                     dismiss()
                 }
-                .foregroundColor(.secondary)
+                .secondaryButtonStyle()
             }
             
             ToolbarItem(placement: .navigationBarTrailing) {
@@ -91,8 +112,7 @@ struct EditCourseDetailView: View {
                     saveChanges()
                     dismiss()
                 }
-                .fontWeight(.semibold)
-                .disabled(courseName.isEmpty)
+                .primaryButtonStyle(isDisabled: courseName.isEmpty)
             }
         }
         .onAppear {
@@ -110,16 +130,6 @@ struct EditCourseDetailView: View {
                     loadAbsenceRecords()
                 }
             }
-        }
-        .alert("記録を削除", isPresented: $showingDeleteAlert) {
-            Button("削除", role: .destructive) {
-                if let record = recordToDelete {
-                    deleteAbsenceRecord(record)
-                }
-            }
-            Button("キャンセル", role: .cancel) {}
-        } message: {
-            Text("この欠席記録を削除しますか？")
         }
     }
     
@@ -191,10 +201,10 @@ struct EditCourseDetailView: View {
                 Divider()
                     .padding(.leading, 12)
                 
-                settingRow(title: "通年科目", value: "") {
-                    Toggle("", isOn: $isFullYear)
-                        .labelsHidden()
+                settingRow(title: "通年科目", value: isFullYear ? "はい" : "いいえ") {
+                    EmptyView()
                 }
+                .foregroundColor(.secondary)
             }
         }
         .padding(16)
@@ -243,12 +253,23 @@ struct EditCourseDetailView: View {
                 
                 Spacer()
                 
-                Text("\(absenceRecords.count)件")
+                Button {
+                    selectedAbsenceDate = Date()
+                    showingAddAbsenceAlert = true
+                } label: {
+                    Image(systemName: "plus.circle.fill")
+                        .font(.system(size: 18))
+                        .foregroundColor(.blue)
+                }
+                .buttonStyle(PlainButtonStyle())
+                
+                Text("\(displayedRecordsCount)件")
                     .font(.subheadline)
                     .foregroundColor(.secondary)
+                    .padding(.leading, 8)
             }
             
-            if absenceRecords.isEmpty {
+            if displayedRecords.isEmpty {
                 VStack(spacing: 6) {
                     Image(systemName: "checkmark.circle")
                         .font(.title3)
@@ -262,10 +283,25 @@ struct EditCourseDetailView: View {
                 .padding(.vertical, 16)
             } else {
                 LazyVStack(spacing: 6) {
-                    ForEach(absenceRecords, id: \.recordId) { record in
-                        absenceRecordRow(record: record)
+                    // 既存の記録（削除予定でないもの）
+                    ForEach(absenceRecords.filter { !deletedRecords.contains($0) }, id: \.recordId) { record in
+                        absenceRecordRow(record: record, isExisting: true)
+                            .transition(.asymmetric(
+                                insertion: .move(edge: .leading).combined(with: .opacity),
+                                removal: .move(edge: .trailing).combined(with: .opacity)
+                            ))
+                    }
+                    
+                    // 一時的に追加された記録
+                    ForEach(tempAddedRecords) { tempRecord in
+                        tempAbsenceRecordRow(tempRecord: tempRecord)
+                            .transition(.asymmetric(
+                                insertion: .move(edge: .leading).combined(with: .opacity),
+                                removal: .move(edge: .trailing).combined(with: .opacity)
+                            ))
                     }
                 }
+                .animation(.easeInOut(duration: 0.3), value: displayedRecordsCount)
             }
         }
         .padding(16)
@@ -314,7 +350,7 @@ struct EditCourseDetailView: View {
         .padding(.horizontal, 12)
     }
     
-    private func absenceRecordRow(record: AttendanceRecord) -> some View {
+    private func absenceRecordRow(record: AttendanceRecord, isExisting: Bool) -> some View {
         HStack {
             VStack(alignment: .leading, spacing: 2) {
                 Text(formatDate(record.date ?? Date()))
@@ -328,8 +364,9 @@ struct EditCourseDetailView: View {
             Spacer()
             
             Button {
-                recordToDelete = record
-                showingDeleteAlert = true
+                if isExisting {
+                    markRecordForDeletion(record)
+                }
             } label: {
                 Image(systemName: "minus.circle.fill")
                     .font(.system(size: 18))
@@ -343,11 +380,112 @@ struct EditCourseDetailView: View {
         .cornerRadius(8)
     }
     
+    private func tempAbsenceRecordRow(tempRecord: TempAbsenceRecord) -> some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(formatDate(tempRecord.date))
+                    .font(.system(size: 15, weight: .medium))
+                
+                HStack(spacing: 4) {
+                    Text(tempRecord.type.displayName)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    
+                    Text("(未保存)")
+                        .font(.caption)
+                        .foregroundColor(.orange)
+                        .padding(.horizontal, 4)
+                        .padding(.vertical, 1)
+                        .background(Color.orange.opacity(0.1))
+                        .cornerRadius(4)
+                }
+            }
+            
+            Spacer()
+            
+            Button {
+                removeTempRecord(tempRecord)
+            } label: {
+                Image(systemName: "minus.circle.fill")
+                    .font(.system(size: 18))
+                    .foregroundColor(.red)
+            }
+            .buttonStyle(PlainButtonStyle())
+        }
+        .padding(.vertical, 8)
+        .padding(.horizontal, 12)
+        .background(Color(.secondarySystemBackground).opacity(0.8))
+        .cornerRadius(8)
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(Color.orange.opacity(0.3), lineWidth: 1)
+        )
+    }
+    
+    // MARK: - Helper Properties
+    
+    // 表示用の記録数（既存の記録 - 削除予定 + 一時追加）
+    private var displayedRecordsCount: Int {
+        let existingCount = absenceRecords.filter { !deletedRecords.contains($0) }.count
+        return existingCount + tempAddedRecords.count
+    }
+    
+    // 表示用の記録が空かどうか
+    private var displayedRecords: [Any] {
+        let existing = absenceRecords.filter { !deletedRecords.contains($0) }
+        return existing + tempAddedRecords
+    }
+    
     // MARK: - Helper Methods
     
     private var dayName: String {
         let index = Int(course.dayOfWeek)
         return index > 0 && index < dayNames.count ? dayNames[index] : ""
+    }
+    
+    
+    // 通年科目の自動配置処理
+    private func handleFullYearCourseCreation() {
+        guard let currentSemester = viewModel.currentSemester else { return }
+        
+        // 現在の学期タイプを確認
+        let currentType = SemesterType(rawValue: currentSemester.semesterType ?? "") ?? .firstHalf
+        let otherType: SemesterType = (currentType == .firstHalf) ? .secondHalf : .firstHalf
+        
+        // もう一方の学期を取得
+        guard let otherSemester = viewModel.availableSemesters.first(where: { 
+            $0.semesterType == otherType.rawValue 
+        }) else { return }
+        
+        // 同名の授業が既に存在するかチェック
+        let courseRequest: NSFetchRequest<Course> = Course.fetchRequest()
+        courseRequest.predicate = NSPredicate(
+            format: "courseName == %@ AND semester == %@ AND dayOfWeek == %@ AND period == %@",
+            courseName,
+            otherSemester,
+            course.dayOfWeek,
+            course.period
+        )
+        
+        do {
+            let existingCourses = try viewModel.managedObjectContext.fetch(courseRequest)
+            if existingCourses.isEmpty {
+                // 他方の学期に同じ授業を作成
+                let otherCourse = Course(context: viewModel.managedObjectContext)
+                otherCourse.courseId = UUID()
+                otherCourse.courseName = courseName
+                otherCourse.dayOfWeek = course.dayOfWeek
+                otherCourse.period = course.period
+                otherCourse.totalClasses = Int16(totalClasses)
+                otherCourse.maxAbsences = Int16(maxAbsences)
+                otherCourse.semester = otherSemester
+                otherCourse.isNotificationEnabled = course.isNotificationEnabled
+                otherCourse.isFullYear = true
+                otherCourse.colorIndex = Int16(selectedColorIndex)
+            }
+        } catch {
+            print("通年科目の自動配置エラー: \(error)")
+        }
     }
     
     private func formatDate(_ date: Date) -> String {
@@ -382,28 +520,111 @@ struct EditCourseDetailView: View {
         }
     }
     
-    private func deleteAbsenceRecord(_ record: AttendanceRecord) {
-        // 削除予定として記録（実際にはまだ削除しない）
-        deletedRecords.insert(record)
-        
-        // 表示用のリストから削除
-        if let index = absenceRecords.firstIndex(of: record) {
-            absenceRecords.remove(at: index)
+    // MARK: - Temporary Change Management
+    
+    private func markRecordForDeletion(_ record: AttendanceRecord) {
+        _ = withAnimation(.easeInOut(duration: 0.3)) {
+            deletedRecords.insert(record)
         }
+        
+        // 軽いハプティックフィードバック
+        let impactFeedback = UIImpactFeedbackGenerator(style: .light)
+        impactFeedback.impactOccurred()
+    }
+    
+    private func removeTempRecord(_ tempRecord: TempAbsenceRecord) {
+        withAnimation(.easeInOut(duration: 0.3)) {
+            tempAddedRecords.removeAll { $0.id == tempRecord.id }
+        }
+        
+        // 軽いハプティックフィードバック
+        let impactFeedback = UIImpactFeedbackGenerator(style: .light)
+        impactFeedback.impactOccurred()
+    }
+    
+    private func discardTempChanges() {
+        // 全ての一時的な変更を破棄
+        deletedRecords.removeAll()
+        tempAddedRecords.removeAll()
+        
+        // 元の値に戻す
+        courseName = course.courseName ?? ""
+        totalClasses = Int(course.totalClasses)
+        maxAbsences = Int(course.maxAbsences)
+        selectedColorIndex = Int(course.colorIndex)
+        isFullYear = course.isFullYear
+    }
+    
+    private func addAbsenceRecord() {
+        // 一時的な記録として追加（まだ保存しない）
+        let tempRecord = TempAbsenceRecord(
+            date: selectedAbsenceDate,
+            type: .absent,
+            memo: "手動追加"
+        )
+        
+        withAnimation(.easeInOut(duration: 0.3)) {
+            tempAddedRecords.append(tempRecord)
+        }
+        
+        // ハプティックフィードバック
+        let impactFeedback = UIImpactFeedbackGenerator(style: .medium)
+        impactFeedback.impactOccurred()
+        
+        // 次回のためにリセット
+        selectedAbsenceDate = Date()
     }
     
     private func saveChanges() {
-        // 削除予定の記録を実際に削除
+        // 1. 削除予定の記録を実際に削除
         for record in deletedRecords {
             viewModel.managedObjectContext.delete(record)
         }
         
-        // コース情報を更新
-        course.courseName = courseName
-        course.totalClasses = Int16(totalClasses)
-        course.maxAbsences = Int16(maxAbsences)
-        course.colorIndex = Int16(selectedColorIndex)
-        course.isFullYear = isFullYear
+        // 2. 一時的に追加された記録を実際に保存
+        for tempRecord in tempAddedRecords {
+            viewModel.addAbsenceRecord(
+                for: course,
+                date: tempRecord.date,
+                type: tempRecord.type,
+                memo: tempRecord.memo
+            )
+        }
+        
+        // 3. 同名の他の授業も同じ設定に更新
+        if let courseName = course.courseName {
+            let courseRequest: NSFetchRequest<Course> = Course.fetchRequest()
+            courseRequest.predicate = NSPredicate(format: "courseName == %@", courseName)
+            
+            do {
+                let sameCourses = try viewModel.managedObjectContext.fetch(courseRequest)
+                for sameCourse in sameCourses {
+                    sameCourse.courseName = self.courseName
+                    sameCourse.totalClasses = Int16(totalClasses)
+                    sameCourse.maxAbsences = Int16(maxAbsences)
+                    sameCourse.colorIndex = Int16(selectedColorIndex)
+                    sameCourse.isFullYear = isFullYear
+                }
+            } catch {
+                print("同名授業の更新エラー: \(error)")
+            }
+        } else {
+            // 単一授業の更新
+            course.courseName = courseName
+            course.totalClasses = Int16(totalClasses)
+            course.maxAbsences = Int16(maxAbsences)
+            course.colorIndex = Int16(selectedColorIndex)
+            course.isFullYear = isFullYear
+        }
+        
+        // 4. 通年科目の場合、もう一方の学期にも自動配置
+        if isFullYear {
+            handleFullYearCourseCreation()
+        }
+        
+        // 5. 一時的な変更をクリア
+        deletedRecords.removeAll()
+        tempAddedRecords.removeAll()
         
         viewModel.save()
         viewModel.loadTimetable()
@@ -426,4 +647,64 @@ struct EditCourseDetailView: View {
     course.colorIndex = 0
     
     return EditCourseDetailView(course: course, viewModel: AttendanceViewModel(persistenceController: .preview))
+}
+
+// MARK: - AddAbsenceRecordSheet
+
+struct AddAbsenceRecordSheet: View {
+    @Binding var selectedDate: Date
+    let onAdd: () -> Void
+    let onCancel: () -> Void
+    
+    var body: some View {
+        NavigationView {
+            VStack(spacing: 24) {
+                VStack(spacing: 16) {
+                    Text("欠席記録を追加")
+                        .font(.title2)
+                        .fontWeight(.semibold)
+                    
+                    Text("欠席した日付を選択してください")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                }
+                
+                DatePicker(
+                    "欠席日",
+                    selection: $selectedDate,
+                    displayedComponents: .date
+                )
+                .datePickerStyle(GraphicalDatePickerStyle())
+                .padding()
+                .background(Color(.secondarySystemBackground))
+                .cornerRadius(12)
+                
+                Spacer()
+                
+                HStack(spacing: 16) {
+                    Button("キャンセル") {
+                        onCancel()
+                    }
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundColor(.secondary)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 12)
+                    .background(Color(.tertiarySystemBackground))
+                    .cornerRadius(10)
+                    
+                    Button("追加") {
+                        onAdd()
+                    }
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 12)
+                    .background(Color.blue)
+                    .cornerRadius(10)
+                }
+            }
+            .padding()
+            .navigationBarHidden(true)
+        }
+    }
 }

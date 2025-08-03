@@ -9,7 +9,7 @@ import SwiftUI
 import CoreData
 
 struct TimetableView: View {
-    @StateObject private var viewModel = AttendanceViewModel()
+    @EnvironmentObject private var viewModel: AttendanceViewModel
     @State private var selectedCourse: Course?
     @State private var showingAddCourse = false
     @State private var selectedTimeSlot: (day: Int, period: Int)?
@@ -18,6 +18,10 @@ struct TimetableView: View {
     @State private var showingCourseEditDetail = false
     @State private var selectedPeriod: Int?
     @State private var showingPeriodEdit = false
+    @State private var showingDuplicateAlert = false
+    @State private var showingDailyLimitAlert = false
+    @State private var duplicateCourseName = ""
+    @State private var dailyLimitCourseName = ""
     
     private let dayNames = ["月", "火", "水", "木", "金"]
     private let periods = ["1限", "2限", "3限", "4限", "5限"]
@@ -37,29 +41,38 @@ struct TimetableView: View {
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Menu {
-                        ForEach(SemesterType.allCases, id: \.self) { type in
+                        ForEach(viewModel.availableSemesters, id: \.semesterId) { semester in
                             Button(action: {
                                 withAnimation(.easeInOut(duration: 0.3)) {
-                                    viewModel.switchSemester(to: type)
+                                    viewModel.switchToSemester(semester)
                                 }
                             }) {
-                                Label(type.displayName, systemImage: type.icon)
-                                if viewModel.currentSemesterType == type {
-                                    Image(systemName: "checkmark")
+                                HStack {
+                                    Text(semester.name ?? "")
+                                    Spacer()
+                                    if viewModel.currentSemester?.semesterId == semester.semesterId {
+                                        Image(systemName: "checkmark")
+                                            .foregroundColor(.blue)
+                                    }
                                 }
                             }
                         }
+                        
+                        Divider()
+                        
+                        NavigationLink("シート管理") {
+                            TimetableSheetManagementView()
+                        }
                     } label: {
                         HStack(spacing: 4) {
-                            Image(systemName: viewModel.currentSemesterType.icon)
-                            Text(viewModel.currentSemesterType.displayName)
+                            Image(systemName: "calendar")
+                            Text(viewModel.currentSemester?.name ?? "シート選択")
                                 .font(.subheadline)
                                 .fontWeight(.medium)
                         }
                         .foregroundColor(.blue)
                     }
                 }
-                
             }
             .sheet(isPresented: $showingAddCourse, onDismiss: {
                 // シートが閉じられた時にタイムスロットをリセット
@@ -84,6 +97,16 @@ struct TimetableView: View {
                 }
             } message: {
                 Text(viewModel.errorMessage ?? "")
+            }
+            .alert("記録済み", isPresented: $showingDuplicateAlert) {
+                Button("OK") { }
+            } message: {
+                Text("\(duplicateCourseName)の今日の欠席は既に記録されています")
+            }
+            .alert("1日の記録上限に到達", isPresented: $showingDailyLimitAlert) {
+                Button("OK") { }
+            } message: {
+                Text("\(dailyLimitCourseName)は今日すべてのコマで欠席記録済みです")
             }
             .onChange(of: viewModel.errorMessage) { _, newValue in
                 showingErrorAlert = newValue != nil
@@ -127,6 +150,19 @@ struct TimetableView: View {
         .task {
             // タブ切り替え時にも確実に更新
             loadTimeSlots()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .courseDataDidChange)) { _ in
+            // コースデータ変更時の即座更新
+            DispatchQueue.main.async {
+                viewModel.loadTimetable()
+                viewModel.objectWillChange.send()
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .attendanceDataDidChange)) { _ in
+            // 欠席データ変更時の即座更新
+            DispatchQueue.main.async {
+                viewModel.objectWillChange.send()
+            }
         }
     }
     
@@ -216,7 +252,7 @@ struct TimetableView: View {
             let course = viewModel.timetable[periodIndex][dayIndex]
             EnhancedCourseCell(
                 course: course,
-                absenceCount: course.map { viewModel.getAbsenceCount(for: $0) } ?? 0,
+                absenceCount: course.map { viewModel.getCachedAbsenceCount(for: $0) } ?? 0,
                 statusColor: course.map { viewModel.getStatusColor(for: $0) } ?? .gray,
                 cellWidth: cellWidth,
                 cellHeight: cellHeight,
@@ -242,9 +278,35 @@ struct TimetableView: View {
     private func handleCourseTap(_ course: Course) {
         // ワンタップで欠席記録
         withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
-            viewModel.recordAbsence(for: course)
-            // 即座にUIを更新
-            viewModel.objectWillChange.send()
+            let result = viewModel.recordAbsence(for: course)
+            
+            switch result {
+            case .success:
+                // 記録成功時のUIを更新
+                viewModel.objectWillChange.send()
+                
+                // 成功ハプティックフィードバック
+                let impactFeedback = UIImpactFeedbackGenerator(style: .medium)
+                impactFeedback.impactOccurred()
+                
+            case .alreadyRecorded:
+                // 記録重複時にアラート表示
+                duplicateCourseName = course.courseName ?? ""
+                showingDuplicateAlert = true
+                
+                // 軽い警告ハプティックフィードバック
+                let notificationFeedback = UINotificationFeedbackGenerator()
+                notificationFeedback.notificationOccurred(.warning)
+                
+            case .dailyLimitReached:
+                // 1日上限到達時にアラート表示
+                dailyLimitCourseName = course.courseName ?? ""
+                showingDailyLimitAlert = true
+                
+                // 強い警告ハプティックフィードバック
+                let notificationFeedback = UINotificationFeedbackGenerator()
+                notificationFeedback.notificationOccurred(.error)
+            }
         }
         
         // 視覚的フィードバック（パーティクルエフェクトのようなアニメーション）
@@ -279,10 +341,11 @@ struct TimetableView: View {
     }
     
     private func loadTimeSlots() {
-        guard let semester = viewModel.currentSemester else { return }
+        guard let semester = viewModel.currentSemester,
+              let semesterId = semester.semesterId else { return }
         
         let request: NSFetchRequest<PeriodTime> = PeriodTime.fetchRequest()
-        request.predicate = NSPredicate(format: "semesterId == %@", semester.semesterId! as CVarArg)
+        request.predicate = NSPredicate(format: "semesterId == %@", semesterId as CVarArg)
         request.sortDescriptors = [NSSortDescriptor(keyPath: \PeriodTime.period, ascending: true)]
         
         let periodTimes = (try? viewModel.managedObjectContext.fetch(request)) ?? []

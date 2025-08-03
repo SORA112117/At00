@@ -20,8 +20,8 @@ class PersistenceController: ObservableObject {
         let semester = Semester(context: viewContext)
         semester.semesterId = UUID()
         semester.name = "2024年度 前期"
-        semester.startDate = Calendar.current.date(from: DateComponents(year: 2024, month: 4, day: 1))!
-        semester.endDate = Calendar.current.date(from: DateComponents(year: 2024, month: 7, day: 31))!
+        semester.startDate = Calendar.current.date(from: DateComponents(year: 2024, month: 4, day: 1)) ?? Date()
+        semester.endDate = Calendar.current.date(from: DateComponents(year: 2024, month: 7, day: 31)) ?? Date()
         semester.isActive = true
         semester.createdAt = Date()
         
@@ -54,12 +54,20 @@ class PersistenceController: ObservableObject {
         container = NSPersistentContainer(name: "AttendanceModel")
         
         if inMemory {
-            container.persistentStoreDescriptions.first!.url = URL(fileURLWithPath: "/dev/null")
+            container.persistentStoreDescriptions.first?.url = URL(fileURLWithPath: "/dev/null")
         }
         
         container.loadPersistentStores { _, error in
             if let error = error as NSError? {
-                fatalError("Core Data error: \(error), \(error.userInfo)")
+                print("Core Data error: \(error), \(error.userInfo)")
+                // エラーを通知
+                DispatchQueue.main.async {
+                    NotificationCenter.default.post(
+                        name: .coreDataError,
+                        object: nil,
+                        userInfo: ["error": error]
+                    )
+                }
             }
         }
         
@@ -75,7 +83,15 @@ class PersistenceController: ObservableObject {
                 try context.save()
             } catch {
                 let nsError = error as NSError
-                fatalError("Core Data save error: \(nsError), \(nsError.userInfo)")
+                print("Core Data save error: \(nsError), \(nsError.userInfo)")
+                // エラーを通知
+                DispatchQueue.main.async {
+                    NotificationCenter.default.post(
+                        name: .coreDataError,
+                        object: nil,
+                        userInfo: ["error": nsError]
+                    )
+                }
             }
         }
     }
