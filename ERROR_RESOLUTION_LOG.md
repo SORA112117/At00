@@ -9,6 +9,71 @@
 
 ---
 
+## 2025-08-03: Publishing changes from background threads警告解決
+
+### 🚨 エラーの概要
+- **エラーメッセージ**: `Publishing changes from background threads is not allowed; make sure to publish values from the main thread`
+- **発生場所**: `/Users/sora1/CODE/At00/At00/ViewModels/AttendanceViewModel.swift:801`
+- **エラーの種類**: SwiftUIスレッドセーフティ警告
+- **影響範囲**: AttendanceViewModel全体
+
+### 🔍 原因分析
+1. **根本原因**: SwiftUIの@Publishedプロパティがバックグラウンドスレッドから更新されていた
+2. **詳細**: Core Dataのfetch操作とその結果のUI反映が同一スレッドで実行されていた
+3. **具体的箇所**: 
+   - `loadAllSemesters()` メソッドで`availableSemesters`を直接更新
+   - `loadCurrentSemester()` メソッドで`currentSemester`を直接更新
+   - その他のメソッドで`errorMessage`, `timetable`, `currentSemesterType`などを直接更新
+
+### 🛠️ 解決方法
+```swift
+// 修正前（問題のあるコード）
+availableSemesters = try context.fetch(request)
+
+// 修正後（スレッドセーフな実装）
+let semesters = try context.fetch(request)
+DispatchQueue.main.async {
+    self.availableSemesters = semesters
+}
+```
+
+**修正対象となった@Publishedプロパティ**:
+- `availableSemesters`
+- `currentSemester` 
+- `currentSemesterType`
+- `timetable`
+- `isInitialized`
+- `errorMessage`
+- `errorBanner`
+- `absenceCountCache`
+
+### ✅ 検証結果
+- ビルド成功: ✓
+- コンパイルエラー: なし
+- 警告: 解決済み
+
+### 🛡️ 予防策
+1. **コーディング規約の徹底**:
+   - @Publishedプロパティの更新は必ずメインスレッドで実行
+   - Core Data操作とUI更新を分離
+   
+2. **標準パターンの採用**:
+   ```swift
+   // Core Data操作（バックグラウンドスレッド可）
+   let result = try context.fetch(request)
+   
+   // UI更新（メインスレッド必須）
+   DispatchQueue.main.async {
+       self.publishedProperty = result
+   }
+   ```
+
+3. **レビューポイント**:
+   - ViewModelで@Publishedプロパティの更新箇所をチェック
+   - 非同期処理での直接代入を避ける
+
+---
+
 ## 2025-08-03: 通年科目学期間データ継承機能実装
 
 ### 🎯 要求の概要

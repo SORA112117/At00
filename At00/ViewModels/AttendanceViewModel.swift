@@ -218,14 +218,18 @@ class AttendanceViewModel: ObservableObject {
         do {
             let semesters = try context.fetch(request)
             if let semester = semesters.first {
-                currentSemester = semester
-                if let typeString = semester.semesterType,
-                   let type = SemesterType(rawValue: typeString) {
-                    currentSemesterType = type
+                DispatchQueue.main.async {
+                    self.currentSemester = semester
+                    if let typeString = semester.semesterType,
+                       let type = SemesterType(rawValue: typeString) {
+                        self.currentSemesterType = type
+                    }
                 }
             }
         } catch {
-            errorMessage = "学期データの読み込みに失敗しました: \(error.localizedDescription)"
+            DispatchQueue.main.async {
+                self.errorMessage = "学期データの読み込みに失敗しました: \(error.localizedDescription)"
+            }
         }
     }
     
@@ -234,21 +238,29 @@ class AttendanceViewModel: ObservableObject {
         guard let semester = currentSemester else { return }
         
         // 時間割を初期化
-        timetable = Array(repeating: Array(repeating: nil, count: 5), count: 5)
+        DispatchQueue.main.async {
+            self.timetable = Array(repeating: Array(repeating: nil, count: 5), count: 5)
+        }
         
         let request: NSFetchRequest<Course> = Course.fetchRequest()
         request.predicate = NSPredicate(format: "semester == %@", semester)
         
         do {
             let courses = try context.fetch(request)
+            var newTimetable = Array(repeating: Array(repeating: nil as Course?, count: 5), count: 5)
             
             for course in courses {
                 let dayIndex = Int(course.dayOfWeek) - 1 // 0-based index
                 let periodIndex = Int(course.period) - 1 // 0-based index
                 
                 if dayIndex >= 0 && dayIndex < 5 && periodIndex >= 0 && periodIndex < 5 {
-                    timetable[periodIndex][dayIndex] = course
+                    newTimetable[periodIndex][dayIndex] = course
                 }
+            }
+            
+            // UIの更新はメインスレッドで
+            DispatchQueue.main.async {
+                self.timetable = newTimetable
             }
             
             // 時間割読み込み後に欠席数キャッシュも更新
@@ -257,7 +269,9 @@ class AttendanceViewModel: ObservableObject {
             // 授業リマインダー通知を更新
             updateClassReminders()
         } catch {
-            errorMessage = "時間割の読み込みに失敗しました: \(error.localizedDescription)"
+            DispatchQueue.main.async {
+                self.errorMessage = "時間割の読み込みに失敗しました: \(error.localizedDescription)"
+            }
         }
     }
     
@@ -349,7 +363,9 @@ class AttendanceViewModel: ObservableObject {
                 print("記録削除成功: \(courseName)")
             } catch {
                 print("記録削除保存エラー: \(error)")
-                errorMessage = "記録の取り消しに失敗しました: \(error.localizedDescription)"
+                DispatchQueue.main.async {
+                    self.errorMessage = "記録の取り消しに失敗しました: \(error.localizedDescription)"
+                }
                 return
             }
             
@@ -365,7 +381,9 @@ class AttendanceViewModel: ObservableObject {
             
         } catch {
             print("記録削除フェッチエラー: \(error)")
-            errorMessage = "記録の取り消しに失敗しました: \(error.localizedDescription)"
+            DispatchQueue.main.async {
+                self.errorMessage = "記録の取り消しに失敗しました: \(error.localizedDescription)"
+            }
         }
     }
     
@@ -665,7 +683,9 @@ class AttendanceViewModel: ObservableObject {
             NotificationCenter.default.post(name: .attendanceDataDidChange, object: nil)
             
         } catch {
-            errorMessage = "授業の削除に失敗しました: \(error.localizedDescription)"
+            DispatchQueue.main.async {
+                self.errorMessage = "授業の削除に失敗しました: \(error.localizedDescription)"
+            }
         }
     }
     
@@ -739,13 +759,17 @@ class AttendanceViewModel: ObservableObject {
             NotificationCenter.default.post(name: .statisticsDataDidChange, object: nil)
             
         } catch {
-            errorMessage = "学期リセットに失敗しました: \(error.localizedDescription)"
+            DispatchQueue.main.async {
+                self.errorMessage = "学期リセットに失敗しました: \(error.localizedDescription)"
+            }
         }
     }
     
     // 学期を切り替える
     func switchSemester(to type: SemesterType) {
-        currentSemesterType = type
+        DispatchQueue.main.async {
+            self.currentSemesterType = type
+        }
         loadSemesterByType(type)
         loadTimetable()
     }
@@ -759,12 +783,16 @@ class AttendanceViewModel: ObservableObject {
         
         // 新しい学期をアクティブにする
         semester.isActive = true
-        currentSemester = semester
+        DispatchQueue.main.async {
+            self.currentSemester = semester
+        }
         
         // 学期タイプも更新
         if let semesterTypeString = semester.semesterType,
            let semesterType = SemesterType(rawValue: semesterTypeString) {
-            currentSemesterType = semesterType
+            DispatchQueue.main.async {
+                self.currentSemesterType = semesterType
+            }
         }
         
         // 時間割を再読み込み
@@ -798,9 +826,14 @@ class AttendanceViewModel: ObservableObject {
         request.sortDescriptors = [NSSortDescriptor(keyPath: \Semester.createdAt, ascending: true)]
         
         do {
-            availableSemesters = try context.fetch(request)
+            let semesters = try context.fetch(request)
+            DispatchQueue.main.async {
+                self.availableSemesters = semesters
+            }
         } catch {
-            errorMessage = "学期データの読み込みに失敗しました: \(error.localizedDescription)"
+            DispatchQueue.main.async {
+                self.errorMessage = "学期データの読み込みに失敗しました: \(error.localizedDescription)"
+            }
         }
     }
     
@@ -849,11 +882,15 @@ class AttendanceViewModel: ObservableObject {
                 
                 // 新しい学期をアクティブに
                 semester.isActive = true
-                currentSemester = semester
+                DispatchQueue.main.async {
+                    self.currentSemester = semester
+                }
                 saveContext()
             }
         } catch {
-            errorMessage = "学期データの読み込みに失敗しました: \(error.localizedDescription)"
+            DispatchQueue.main.async {
+                self.errorMessage = "学期データの読み込みに失敗しました: \(error.localizedDescription)"
+            }
         }
     }
     
@@ -908,7 +945,9 @@ class AttendanceViewModel: ObservableObject {
         } catch {
             // ロールバック処理を追加
             context.rollback()
-            errorMessage = "データの保存に失敗しました: \(error.localizedDescription)"
+            DispatchQueue.main.async {
+                self.errorMessage = "データの保存に失敗しました: \(error.localizedDescription)"
+            }
             
             print("Core Data保存エラー: \(error.localizedDescription)")
             
@@ -1115,7 +1154,9 @@ class AttendanceViewModel: ObservableObject {
     
     /// エラーバナーを手動で消去
     func dismissErrorBanner() {
-        errorBanner = nil
+        DispatchQueue.main.async {
+            self.errorBanner = nil
+        }
     }
     
     /// 成功メッセージを表示
