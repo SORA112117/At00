@@ -522,10 +522,40 @@ struct EnhancedCourseCell: View {
                     onTap()
                 }
         )
+        // アクセシビリティ対応を追加
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(course != nil ? 
+            "\(course?.courseName ?? ""), \(getDayName(from: course)) \(getPeriodName(from: course))" : 
+            "空きコマ")
+        .accessibilityValue(course != nil ? 
+            "欠席\(absenceCount)回、残り\(getRemainingAbsences())回欠席可能" : 
+            "")
+        .accessibilityHint(course != nil ? 
+            "タップして欠席を記録、長押しで詳細を表示" : 
+            "タップして授業を追加")
+        .accessibilityAddTraits(course != nil ? .updatesFrequently : .isButton)
     }
     
     private func getCourseColor(_ course: Course) -> Color {
         return DesignSystem.getColor(for: Int(course.colorIndex))
+    }
+    
+    // アクセシビリティ用ヘルパーメソッド
+    private func getDayName(from course: Course?) -> String {
+        guard let course = course else { return "" }
+        let dayNames = ["", "月", "火", "水", "木", "金", "土", "日"]
+        let dayIndex = Int(course.dayOfWeek)
+        return dayIndex > 0 && dayIndex < dayNames.count ? dayNames[dayIndex] : ""
+    }
+    
+    private func getPeriodName(from course: Course?) -> String {
+        guard let course = course else { return "" }
+        return "\(course.period)限"
+    }
+    
+    private func getRemainingAbsences() -> Int {
+        guard let course = course else { return 0 }
+        return max(0, Int(course.maxAbsences) - absenceCount)
     }
     
     private func createColorBoxGrid(course: Course, absenceCount: Int, cellWidth: CGFloat) -> some View {

@@ -29,6 +29,7 @@ class AttendanceViewModel: ObservableObject {
     
     let persistenceController: PersistenceController
     private let context: NSManagedObjectContext
+    private let backgroundContext: NSManagedObjectContext
     private let notificationManager = NotificationManager.shared
     
     var managedObjectContext: NSManagedObjectContext {
@@ -38,6 +39,7 @@ class AttendanceViewModel: ObservableObject {
     init(persistenceController: PersistenceController = .shared) {
         self.persistenceController = persistenceController
         self.context = persistenceController.container.viewContext
+        self.backgroundContext = persistenceController.container.newBackgroundContext()
         
         // 初期化処理をバックグラウンドで実行
         Task {
@@ -49,16 +51,18 @@ class AttendanceViewModel: ObservableObject {
     @MainActor
     private func initializeData() async {
         // Core Data操作をバックグラウンドコンテキストで実行
-        await context.perform {
+        await backgroundContext.perform {
             self.setupSemesters()
-            self.loadCurrentSemester()
-            self.loadTimetable()
         }
         
-        // メインスレッドでUIを更新
-        self.isInitialized = true
-        self.objectWillChange.send()
-        print("AttendanceViewModel initialization completed")
+        // メインコンテキストでUIデータ読み込み
+        await MainActor.run {
+            self.loadCurrentSemester()
+            self.loadTimetable()
+            self.isInitialized = true
+            self.objectWillChange.send()
+            print("AttendanceViewModel initialization completed")
+        }
     }
     
     // 欠席数キャッシュ
@@ -943,10 +947,17 @@ class AttendanceViewModel: ObservableObject {
     private var saveTimer: Timer?
     
     private func saveContext() {
+        guard context.hasChanges else { return }
+        
         do {
             try context.save()
+            print("Core Data保存成功")
         } catch {
+            // ロールバック処理を追加
+            context.rollback()
             errorMessage = "データの保存に失敗しました: \(error.localizedDescription)"
+            
+            print("Core Data保存エラー: \(error.localizedDescription)")
             
             // エラー通知を送信
             NotificationCenter.default.post(

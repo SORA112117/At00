@@ -169,12 +169,16 @@ struct SinglePeriodEditView: View {
     }
     
     private func loadPeriodTime() {
-        guard let semester = viewModel.currentSemester else { return }
+        guard let semester = viewModel.currentSemester,
+              let semesterId = semester.semesterId else { 
+            print("Core Data整合性エラー: semester または semesterId が nil")
+            return 
+        }
         
         let request: NSFetchRequest<PeriodTime> = PeriodTime.fetchRequest()
         request.predicate = NSPredicate(
             format: "semesterId == %@ AND period == %d",
-            semester.semesterId! as CVarArg,
+            semesterId as CVarArg,
             period
         )
         request.fetchLimit = 1
@@ -208,7 +212,11 @@ struct SinglePeriodEditView: View {
     }
     
     private func savePeriodTime() {
-        guard let semester = viewModel.currentSemester else { return }
+        guard let semester = viewModel.currentSemester,
+              let semesterId = semester.semesterId else {
+            print("Core Data整合性エラー: semester または semesterId が nil")
+            return
+        }
         
         let context = viewModel.managedObjectContext
         
@@ -216,7 +224,7 @@ struct SinglePeriodEditView: View {
         let request: NSFetchRequest<PeriodTime> = PeriodTime.fetchRequest()
         request.predicate = NSPredicate(
             format: "semesterId == %@ AND period == %d",
-            semester.semesterId! as CVarArg,
+            semesterId as CVarArg,
             period
         )
         request.fetchLimit = 1
@@ -227,7 +235,7 @@ struct SinglePeriodEditView: View {
         } else {
             periodTime = PeriodTime(context: context)
             periodTime.period = Int16(period)
-            periodTime.semesterId = semester.semesterId!
+            periodTime.semesterId = semesterId
         }
         
         periodTime.startTime = startTime

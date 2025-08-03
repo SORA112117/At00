@@ -68,10 +68,14 @@ struct PeriodTimeSettingsView: View {
     }
     
     private func loadPeriodTimes() {
-        guard let semester = viewModel.currentSemester else { return }
+        guard let semester = viewModel.currentSemester,
+              let semesterId = semester.semesterId else {
+            print("Core Data整合性エラー: semester または semesterId が nil")
+            return
+        }
         
         let request: NSFetchRequest<PeriodTime> = PeriodTime.fetchRequest()
-        request.predicate = NSPredicate(format: "semesterId == %@", semester.semesterId! as CVarArg)
+        request.predicate = NSPredicate(format: "semesterId == %@", semesterId as CVarArg)
         request.sortDescriptors = [NSSortDescriptor(keyPath: \PeriodTime.period, ascending: true)]
         
         let existingPeriodTimes = (try? viewModel.managedObjectContext.fetch(request)) ?? []
@@ -109,13 +113,17 @@ struct PeriodTimeSettingsView: View {
     }
     
     private func savePeriodTimes() {
-        guard let semester = viewModel.currentSemester else { return }
+        guard let semester = viewModel.currentSemester,
+              let semesterId = semester.semesterId else {
+            print("Core Data整合性エラー: semester または semesterId が nil")
+            return
+        }
         
         let context = viewModel.managedObjectContext
         
         // 既存の時限時間設定を削除
         let request: NSFetchRequest<PeriodTime> = PeriodTime.fetchRequest()
-        request.predicate = NSPredicate(format: "semesterId == %@", semester.semesterId! as CVarArg)
+        request.predicate = NSPredicate(format: "semesterId == %@", semesterId as CVarArg)
         let existingPeriodTimes = (try? context.fetch(request)) ?? []
         existingPeriodTimes.forEach { context.delete($0) }
         
@@ -125,7 +133,7 @@ struct PeriodTimeSettingsView: View {
             periodTime.period = Int16(periodData.period)
             periodTime.startTime = periodData.startTime
             periodTime.endTime = periodData.endTime
-            periodTime.semesterId = semester.semesterId!
+            periodTime.semesterId = semesterId
         }
         
         try? context.save()

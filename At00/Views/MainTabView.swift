@@ -18,6 +18,8 @@ struct MainTabView: View {
                     Text("時間割")
                 }
                 .tag(0)
+                .accessibilityLabel("時間割タブ")
+                .accessibilityHint("授業の時間割と出席状況を表示")
             
             EnhancedStatisticsView()
                 .tabItem {
@@ -25,6 +27,8 @@ struct MainTabView: View {
                     Text("統計")
                 }
                 .tag(1)
+                .accessibilityLabel("統計タブ")
+                .accessibilityHint("出席統計とグラフを表示")
             
             SettingsView()
                 .tabItem {
@@ -32,6 +36,8 @@ struct MainTabView: View {
                     Text("設定")
                 }
                 .tag(2)
+                .accessibilityLabel("設定タブ")
+                .accessibilityHint("アプリの設定を変更")
         }
         .accentColor(.blue)
     }
