@@ -270,4 +270,5 @@ struct AddTimetableSheetView: View {
 
 #Preview {
     AddTimetableSheetView()
+        .environment(\.managedObjectContext, PersistenceController.preview.container.viewContext)
 }

@@ -733,4 +733,6 @@ struct SemesterSelectionRow: View {
 
 #Preview {
     SettingsView(shouldNavigateToSheetManagement: .constant(false))
+        .environment(\.managedObjectContext, PersistenceController.preview.container.viewContext)
+        .environmentObject(AttendanceViewModel(persistenceController: .preview))
 }

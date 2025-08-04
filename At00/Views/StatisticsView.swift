@@ -434,4 +434,6 @@ struct StatItem: View {
 
 #Preview {
     StatisticsView()
+        .environment(\.managedObjectContext, PersistenceController.preview.container.viewContext)
+        .environmentObject(AttendanceViewModel(persistenceController: .preview))
 }

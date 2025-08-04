@@ -751,3 +751,193 @@ showErrorBanner(
 5. **詳細なログ出力でデバッグを容易に**
 
 **最終更新**: 2025-08-04 02:30 JST
+
+---
+
+## 2025-08-04: UI改善 - 時限編集画面とシート名表示の修正
+
+### 🚨 問題内容
+**症状1**: 時限編集画面で時間ピッカーの初期値が現在時刻になってしまう
+**症状2**: シート名が長い場合に「授業欠席管理」タイトルと重なる
+
+**発生箇所**: 
+- SinglePeriodEditView.swift - CustomTimePicker
+- TimetableView.swift - semesterSelectionMenu
+
+### 🔍 原因
+1. **時間ピッカー初期値問題**
+   - `CustomTimePicker`の`selectedHour`と`selectedMinute`が固定値（9:00）で初期化
+   - `onAppear`での初期化が遅れて現在時刻が表示される
+
+2. **シート名表示問題**
+   - 長いシート名が制限なしで表示されナビゲーションタイトルと競合
+
+### 🔧 解決方法
+
+#### 1. CustomTimePickerの初期値修正
+```swift
+// 修正前: 固定初期値
+@State private var selectedHour: Int = 9
+@State private var selectedMinute: Int = 0
+
+// 修正後: 動的初期値設定
+init(selection: Binding<Date>, minuteInterval: Int) {
+    self._selection = selection
+    self.minuteInterval = minuteInterval
+    
+    // 初期値を選択された時間から設定
+    let calendar = Calendar.current
+    let hour = calendar.component(.hour, from: selection.wrappedValue)
+    let minute = calendar.component(.minute, from: selection.wrappedValue)
+    let roundedMinute = (minute / minuteInterval) * minuteInterval
+    
+    self._selectedHour = State(initialValue: hour)
+    self._selectedMinute = State(initialValue: roundedMinute)
+}
+```
+
+#### 2. シート名の文字数制限追加
+```swift
+// 新規関数追加
+private func truncateSheetName(_ name: String) -> String {
+    let maxLength = 8
+    if name.count <= maxLength {
+        return name
+    } else {
+        let truncatedIndex = name.index(name.startIndex, offsetBy: maxLength - 1)
+        return String(name[..<truncatedIndex]) + "..."
+    }
+}
+
+// UI表示部分の修正
+Text(truncateSheetName(viewModel.currentSemester?.name ?? "シート選択"))
+    .font(.subheadline)
+    .fontWeight(.medium)
+    .lineLimit(1)
+```
+
+### ✅ 検証結果
+- **時間ピッカー**: 1限 → 9:00-10:30、2限 → 10:40-12:10 で正しく初期化
+- **シート名表示**: 8文字以上は"..."で省略表示
+- **レイアウト**: タイトルとの重複解消
+- **ビルド**: BUILD SUCCEEDED
+
+### 📊 修正効果
+1. **UX向上**: 時限編集時の時間が期待通りに表示
+2. **UI品質向上**: レイアウトの崩れ防止
+3. **視認性向上**: タイトルとの競合解消
+
+### 🛡️ 予防策
+1. **SwiftUIのState初期化**: `init`で動的に設定
+2. **文字列表示制限**: UI制約を考慮した文字数制限
+3. **レスポンシブデザイン**: `.lineLimit(1)`で確実な1行表示
+
+**最終更新**: 2025-08-04 03:15 JST
+
+---
+
+## 2025-08-04: SwiftUIプレビュークラッシュ問題の修正
+
+### 🚨 問題内容
+**症状**: 複数のViewでSwiftUIプレビューを実行するとクラッシュする
+
+**影響範囲**: 
+- TimetableView.swift
+- StatisticsView.swift  
+- EnhancedStatisticsView.swift
+- SettingsView.swift
+- EditTimetableSheetView.swift
+- AddTimetableSheetView.swift
+
+### 🔍 原因
+1. **環境オブジェクト不足**
+   - `@EnvironmentObject`を使用するViewで必要な環境設定が不足
+   - `AttendanceViewModel`が必要なViewで`environmentObject`修飾子が未設定
+
+2. **Core Dataコンテキスト不足**
+   - Core Dataを使用するViewで`managedObjectContext`が未設定
+
+3. **不正なプレビューデータ**
+   - `EditTimetableSheetView`で空の`Semester()`オブジェクトを使用
+
+### 🔧 解決方法
+
+#### 1. TimetableViewプレビューの修正
+```swift
+// 修正前
+#Preview {
+    TimetableView()
+        .environment(\.managedObjectContext, PersistenceController.preview.container.viewContext)
+}
+
+// 修正後
+#Preview {
+    TimetableView()
+        .environment(\.managedObjectContext, PersistenceController.preview.container.viewContext)
+        .environmentObject(AttendanceViewModel(persistenceController: .preview))
+}
+```
+
+#### 2. StatisticsViewプレビューの修正
+```swift
+// 修正前
+#Preview {
+    StatisticsView()
+}
+
+// 修正後  
+#Preview {
+    StatisticsView()
+        .environment(\.managedObjectContext, PersistenceController.preview.container.viewContext)
+        .environmentObject(AttendanceViewModel(persistenceController: .preview))
+}
+```
+
+#### 3. EditTimetableSheetViewプレビューの修正
+```swift
+// 修正前
+#Preview {
+    EditTimetableSheetView(semester: Semester())
+}
+
+// 修正後
+#Preview {
+    let context = PersistenceController.preview.container.viewContext
+    let semester = Semester(context: context)
+    semester.name = "2024年度前期"
+    semester.startDate = Date()
+    semester.endDate = Calendar.current.date(byAdding: .month, value: 4, to: Date()) ?? Date()
+    semester.isActive = true
+    
+    return EditTimetableSheetView(semester: semester)
+        .environment(\.managedObjectContext, context)
+}
+```
+
+#### 4. その他のViewプレビュー修正
+- **EnhancedStatisticsView**: `.environmentObject(AttendanceViewModel(persistenceController: .preview))`追加
+- **SettingsView**: Core DataコンテキストとViewModel環境オブジェクト追加
+- **AddTimetableSheetView**: Core Dataコンテキスト追加
+
+### ✅ 検証結果
+- **ビルド**: BUILD SUCCEEDED
+- **プレビュー**: 全Viewで正常動作確認
+- **環境設定**: 適切なCore DataとViewModel注入完了
+
+### 📊 修正効果
+1. **開発効率向上**: プレビューによる迅速なUI確認が可能
+2. **デバッグ改善**: リアルタイムでのView動作確認
+3. **品質向上**: プレビューでの事前テストによるバグ防止
+
+### 🛡️ 予防策
+1. **統一プレビューパターン**: 環境オブジェクトが必要なViewでは必ず以下を追加
+   ```swift
+   .environment(\.managedObjectContext, PersistenceController.preview.container.viewContext)
+   .environmentObject(AttendanceViewModel(persistenceController: .preview))
+   ```
+
+2. **Core Dataオブジェクト作成**: プレビューで使用するCore Dataオブジェクトは適切なコンテキストで作成
+
+3. **プレビューテンプレート**: 新規View作成時は既存の正常なプレビューをテンプレートとして参考
+
+**最終更新**: 2025-08-04 03:45 JST

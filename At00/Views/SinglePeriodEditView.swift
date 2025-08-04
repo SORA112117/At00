@@ -253,6 +253,20 @@ struct CustomTimePicker: View {
     @State private var selectedMinute: Int = 0
     @State private var isInitialized = false
     
+    init(selection: Binding<Date>, minuteInterval: Int) {
+        self._selection = selection
+        self.minuteInterval = minuteInterval
+        
+        // 初期値を選択された時間から設定
+        let calendar = Calendar.current
+        let hour = calendar.component(.hour, from: selection.wrappedValue)
+        let minute = calendar.component(.minute, from: selection.wrappedValue)
+        let roundedMinute = (minute / minuteInterval) * minuteInterval
+        
+        self._selectedHour = State(initialValue: hour)
+        self._selectedMinute = State(initialValue: roundedMinute)
+    }
+    
     private let hours = Array(6...23) // 6:00 - 23:00
     private var minutes: [Int] {
         stride(from: 0, to: 60, by: minuteInterval).map { $0 }

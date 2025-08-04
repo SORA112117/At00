@@ -91,7 +91,7 @@ struct TimetableView: View {
                     Spacer()
                 }
             }
-            .navigationTitle("授業欠席管理")
+            .navigationTitle("欠席管理")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
@@ -131,9 +131,10 @@ struct TimetableView: View {
         } label: {
             HStack(spacing: 4) {
                 Image(systemName: "calendar")
-                Text(viewModel.currentSemester?.name ?? "シート選択")
+                Text(truncateSheetName(viewModel.currentSemester?.name ?? "シート選択"))
                     .font(.subheadline)
                     .fontWeight(.medium)
+                    .lineLimit(1)
             }
             .foregroundColor(.blue)
         }
@@ -335,6 +336,17 @@ struct TimetableView: View {
         // この処理は既にEnhancedCourseCellで実装されているshowingCountAnimationで対応
         withAnimation(.spring(response: 0.2, dampingFraction: 0.6)) {
             // アニメーション処理はEnhancedCourseCellで実装済み
+        }
+    }
+    
+    private func truncateSheetName(_ name: String) -> String {
+        // 「欠席管理」の文字列と競合しないよう、最大7文字に制限
+        let maxLength = 7
+        if name.count <= maxLength {
+            return name
+        } else {
+            let truncatedIndex = name.index(name.startIndex, offsetBy: maxLength - 1)
+            return String(name[..<truncatedIndex]) + "..."
         }
     }
     
@@ -636,4 +648,5 @@ struct EnhancedCourseCell: View {
 #Preview {
     TimetableView()
         .environment(\.managedObjectContext, PersistenceController.preview.container.viewContext)
+        .environmentObject(AttendanceViewModel(persistenceController: .preview))
 }

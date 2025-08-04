@@ -202,5 +202,13 @@ struct EditTimetableSheetView: View {
 }
 
 #Preview {
-    EditTimetableSheetView(semester: Semester())
+    let context = PersistenceController.preview.container.viewContext
+    let semester = Semester(context: context)
+    semester.name = "2024年度前期"
+    semester.startDate = Date()
+    semester.endDate = Calendar.current.date(byAdding: .month, value: 4, to: Date()) ?? Date()
+    semester.isActive = true
+    
+    return EditTimetableSheetView(semester: semester)
+        .environment(\.managedObjectContext, context)
 }

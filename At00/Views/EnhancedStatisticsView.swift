@@ -436,4 +436,5 @@ struct EnhancedStatisticsView: View {
 #Preview {
     EnhancedStatisticsView()
         .environment(\.managedObjectContext, PersistenceController.preview.container.viewContext)
+        .environmentObject(AttendanceViewModel(persistenceController: .preview))
 }
