@@ -39,6 +39,7 @@ class AttendanceViewModel: ObservableObject {
     @Published var timetable: [[Course?]] = Array(repeating: Array(repeating: nil, count: 5), count: 5)
     @Published var isLoading = false
     @Published var isInitialized = false
+    @Published var initializationError: String?
     @Published var errorMessage: String?
     @Published var errorBanner: ErrorBannerInfo?
     @Published var currentSemesterType: SemesterType = .firstHalf
@@ -62,22 +63,54 @@ class AttendanceViewModel: ObservableObject {
         self.context = persistenceController.container.viewContext
         self.backgroundContext = persistenceController.container.newBackgroundContext()
         
-        // 初期化処理をバックグラウンドで実行
-        Task {
-            await initializeData()
+        // 初期化処理を同期的に開始（UIの準備を待たない）
+        performInitialSetup()
+    }
+    
+    // 同期的な初期化処理
+    private func performInitialSetup() {
+        // Core Dataの準備が完了してから初期化
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            
+            do {
+                // 1. 学期のセットアップ（必須）
+                self.setupSemesters()
+                
+                // 2. 現在の学期を読み込み（setupSemestersの結果に依存）
+                self.loadCurrentSemester()
+                
+                // 3. 時間割を読み込み（currentSemesterに依存）
+                if self.currentSemester != nil {
+                    self.loadTimetable()
+                }
+                
+                // 4. 初期化完了
+                self.isInitialized = true
+                self.initializationError = nil
+                self.objectWillChange.send()
+                
+                print("AttendanceViewModel initialization completed successfully")
+                print("Available semesters: \(self.availableSemesters.count)")
+                print("Current semester: \(self.currentSemester?.name ?? "none")")
+                
+            } catch {
+                print("AttendanceViewModel initialization failed: \(error)")
+                self.initializationError = "初期化に失敗しました: \(error.localizedDescription)"
+                self.errorBanner = ErrorBannerInfo(
+                    message: "アプリの初期化に失敗しました。再起動してください。",
+                    type: .systemError
+                )
+                self.isInitialized = false
+            }
         }
     }
     
-    // 非同期初期化処理
-    @MainActor
-    private func initializeData() async {
-        // すべての操作をメインコンテキストで実行して同期を確保
-        setupSemesters()
-        loadCurrentSemester()
-        loadTimetable()
-        isInitialized = true
-        objectWillChange.send()
-        print("AttendanceViewModel initialization completed")
+    /// 初期化を再試行
+    func retryInitialization() {
+        isInitialized = false
+        initializationError = nil
+        performInitialSetup()
     }
     
     /// 欠席数キャッシュ（パフォーマンス最適化）
@@ -207,6 +240,8 @@ class AttendanceViewModel: ObservableObject {
     
     // 現在の学期を読み込み
     func loadCurrentSemester() {
+        print("loadCurrentSemester: 開始")
+        
         let request: NSFetchRequest<Semester> = Semester.fetchRequest()
         request.predicate = NSPredicate(format: "isActive == true")
         request.sortDescriptors = [NSSortDescriptor(keyPath: \Semester.createdAt, ascending: false)]
@@ -221,11 +256,25 @@ class AttendanceViewModel: ObservableObject {
                        let type = SemesterType(rawValue: typeString) {
                         self.currentSemesterType = type
                     }
+                    print("loadCurrentSemester: 現在の学期 = \(semester.name ?? "Unknown") [アクティブ]")
+                }
+            } else {
+                print("loadCurrentSemester: アクティブな学期が見つかりません")
+                DispatchQueue.main.async {
+                    self.showErrorBanner(
+                        message: "アクティブな学期が見つかりません。設定から学期を追加してください。",
+                        type: .warning
+                    )
                 }
             }
         } catch {
+            print("loadCurrentSemester: エラー = \(error)")
             DispatchQueue.main.async {
                 self.errorMessage = "学期データの読み込みに失敗しました: \(error.localizedDescription)"
+                self.showErrorBanner(
+                    message: "学期情報の読み込みに失敗しました",
+                    type: .systemError
+                )
             }
         }
     }
@@ -760,6 +809,11 @@ class AttendanceViewModel: ObservableObject {
             return
         }
         
+        // ローディング状態を表示
+        DispatchQueue.main.async {
+            self.isLoading = true
+        }
+        
         // Core Dataから最新のSemesterオブジェクトを取得（参照の整合性を保つため）
         let request: NSFetchRequest<Semester> = Semester.fetchRequest()
         request.predicate = NSPredicate(format: "semesterId == %@", targetSemesterId as CVarArg)
@@ -768,6 +822,13 @@ class AttendanceViewModel: ObservableObject {
         do {
             guard let freshSemester = try context.fetch(request).first else {
                 print("switchToSemester エラー: 指定されたsemesterIdの学期が見つかりません")
+                DispatchQueue.main.async {
+                    self.isLoading = false
+                    self.errorBanner = ErrorBannerInfo(
+                        message: "学期の切り替えに失敗しました",
+                        type: .dataNotFound
+                    )
+                }
                 return
             }
             
@@ -778,38 +839,48 @@ class AttendanceViewModel: ObservableObject {
             
             // 新しい学期をアクティブにする（最新の参照を使用）
             freshSemester.isActive = true
+            
+            // 変更を一旦保存（アクティブ状態を確実に保存）
+            save()
+            
+            // UI を更新
             DispatchQueue.main.async {
                 self.currentSemester = freshSemester
                 print("学期切り替え成功: \(freshSemester.name ?? "")")
-            }
-            
-            // 学期タイプも更新
-            if let semesterTypeString = freshSemester.semesterType,
-               let semesterType = SemesterType(rawValue: semesterTypeString) {
-                DispatchQueue.main.async {
+                
+                // 学期タイプも更新
+                if let semesterTypeString = freshSemester.semesterType,
+                   let semesterType = SemesterType(rawValue: semesterTypeString) {
                     self.currentSemesterType = semesterType
                 }
             }
             
-            // 時間割を再読み込み
-            loadTimetable()
-            
-            // 変更を保存
-            save()
-            
-            // 統一通知システムを使用
-            scheduleNotification(.courseData)
+            // 時間割を再読み込み（currentSemesterが設定された後）
+            DispatchQueue.main.async {
+                self.loadTimetable()
+                self.loadAllAbsenceCounts() // 欠席数キャッシュも更新
+                self.isLoading = false
+                
+                // 統一通知システムを使用
+                self.scheduleNotification(.semesterData)
+                self.scheduleNotification(.courseData)
+            }
             
         } catch {
             print("switchToSemester エラー: \(error.localizedDescription)")
             DispatchQueue.main.async {
-                self.errorMessage = "学期の切り替えに失敗しました: \(error.localizedDescription)"
+                self.isLoading = false
+                self.errorBanner = ErrorBannerInfo(
+                    message: "学期の切り替えに失敗しました: \(error.localizedDescription)",
+                    type: .systemError
+                )
             }
         }
     }
     
     // 学期の初期設定
     func setupSemesters() {
+        print("setupSemesters: 開始")
         // 現在の学期のIDを保存（更新後も維持するため）
         let currentSemesterIdBeforeSetup = currentSemester?.semesterId
         
@@ -851,8 +922,14 @@ class AttendanceViewModel: ObservableObject {
             print("学期チェックエラー: \(error)")
             DispatchQueue.main.async {
                 self.errorMessage = "学期データの確認に失敗しました: \(error.localizedDescription)"
+                self.showErrorBanner(
+                    message: "学期データの初期化に失敗しました",
+                    type: .systemError
+                )
             }
         }
+        
+        print("setupSemesters: 完了 - \(availableSemesters.count)個の学期が利用可能")
     }
     
     // データベースを完全にリセットして、デフォルト学期のみを作成

@@ -236,22 +236,24 @@ struct AddTimetableSheetView: View {
             // 現在の学期IDを保存（新しい学期作成後も元の学期を維持するため）
             let currentSemesterIdBeforeUpdate = viewModel.currentSemester?.semesterId
             
-            // 利用可能学期リストを更新
+            // 利用可能学期リストを更新（同期的に実行）
             viewModel.setupSemesters()
             
-            // 元の学期をIDベースで安全に回復（現在表示中の学期を維持）
+            // 元の学期を安全に回復
             if let preservedSemesterId = currentSemesterIdBeforeUpdate {
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                    let recoveryRequest: NSFetchRequest<Semester> = Semester.fetchRequest()
-                    recoveryRequest.predicate = NSPredicate(format: "semesterId == %@", preservedSemesterId as CVarArg)
-                    recoveryRequest.fetchLimit = 1
-                    
-                    if let recoveredSemester = try? viewModel.managedObjectContext.fetch(recoveryRequest).first {
+                // setupSemestersが完了したら即座に回復（遅延は不要）
+                let recoveryRequest: NSFetchRequest<Semester> = Semester.fetchRequest()
+                recoveryRequest.predicate = NSPredicate(format: "semesterId == %@", preservedSemesterId as CVarArg)
+                recoveryRequest.fetchLimit = 1
+                
+                if let recoveredSemester = try? viewModel.managedObjectContext.fetch(recoveryRequest).first {
+                    // 回復した学期が引き続きアクティブであることを確認
+                    if recoveredSemester.isActive {
                         viewModel.currentSemester = recoveredSemester
-                        print("新しい学期作成後、元の学期(\(recoveredSemester.name ?? ""))をIDベースで安全に回復")
-                    } else {
-                        print("AddTimetableSheetView警告: 元の学期ID(\(preservedSemesterId))が見つかりませんでした")
+                        print("新しい学期作成後、元の学期(\(recoveredSemester.name ?? ""))を安全に維持")
                     }
+                } else {
+                    print("AddTimetableSheetView警告: 元の学期ID(\(preservedSemesterId))が見つかりませんでした")
                 }
             }
             

@@ -9,6 +9,7 @@ import SwiftUI
 
 struct MainTabView: View {
     @EnvironmentObject private var viewModel: AttendanceViewModel
+    @State private var showingInitializationError = false
     
     var body: some View {
         ZStack {
@@ -59,6 +60,53 @@ struct MainTabView: View {
                 Spacer()
             }
             .animation(.easeInOut(duration: 0.3), value: viewModel.errorBanner?.id)
+            
+            // 初期化中のローディング表示
+            if !viewModel.isInitialized {
+                ZStack {
+                    Color(.systemBackground)
+                        .ignoresSafeArea()
+                    
+                    VStack(spacing: 20) {
+                        ProgressView()
+                            .scaleEffect(1.5)
+                            .progressViewStyle(CircularProgressViewStyle())
+                        
+                        Text("データを読み込んでいます...")
+                            .font(.headline)
+                            .foregroundColor(.secondary)
+                        
+                        if viewModel.initializationError != nil {
+                            VStack(spacing: 10) {
+                                Text(viewModel.initializationError ?? "")
+                                    .font(.caption)
+                                    .foregroundColor(.red)
+                                    .multilineTextAlignment(.center)
+                                    .padding(.horizontal)
+                                
+                                Button("再試行") {
+                                    viewModel.retryInitialization()
+                                }
+                                .buttonStyle(.borderedProminent)
+                            }
+                        }
+                    }
+                }
+                .transition(.opacity)
+            }
+        }
+        .onAppear {
+            // 初期化状態をチェック
+            checkInitializationStatus()
+        }
+    }
+    
+    private func checkInitializationStatus() {
+        // 初期化完了を待つ（最大3秒）
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+            if !viewModel.isInitialized && viewModel.initializationError == nil {
+                viewModel.initializationError = "初期化が完了しませんでした。アプリを再起動してください。"
+            }
         }
     }
 }

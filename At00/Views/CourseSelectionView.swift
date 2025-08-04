@@ -116,26 +116,33 @@ struct CourseSelectionView: View {
                 }
             }
             .onAppear {
-                // 即座に初期化状態をチェックして設定
+                // 初期化状態のチェック
                 print("CourseSelectionView onAppear - isInitialized: \(viewModel.isInitialized), currentSemester: \(viewModel.currentSemester?.name ?? "nil")")
                 
-                // ViewModelが初期化されていない場合は強制的に初期化
+                // ViewModelが初期化されていない場合はエラー表示
                 if !viewModel.isInitialized {
-                    print("ViewModelが未初期化のため、緊急初期化を実行")
-                    viewModel.loadCurrentSemester()
-                    viewModel.loadTimetable()
+                    print("ViewModelが未初期化です。初期化の完了を待っています...")
+                    // 初期化エラーがある場合は再試行を促す
+                    if viewModel.initializationError != nil {
+                        viewModel.retryInitialization()
+                    }
+                    return
                 }
                 
-                // currentSemesterがない場合も再読み込み
-                if viewModel.currentSemester == nil {
-                    print("currentSemesterがnilのため、再読み込み")
-                    viewModel.loadCurrentSemester()
+                // currentSemesterが存在することを確認
+                guard viewModel.currentSemester != nil else {
+                    print("エラー: currentSemesterがnilです")
+                    viewModel.errorBanner = ErrorBannerInfo(
+                        message: "学期情報の読み込みに失敗しました",
+                        type: .dataNotFound
+                    )
+                    return
                 }
                 
-                // 即座に既存授業を読み込み（遅延なし）
+                // 既存授業を読み込み
                 loadAvailableExistingCourses()
                 
-                // 表示フラグを即座に設定
+                // 表示フラグを設定
                 if !hasAppeared {
                     hasAppeared = true
                 }
