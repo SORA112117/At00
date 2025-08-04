@@ -73,36 +73,25 @@ class AttendanceViewModel: ObservableObject {
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
             
-            do {
-                // 1. 学期のセットアップ（必須）
-                self.setupSemesters()
-                
-                // 2. 現在の学期を読み込み（setupSemestersの結果に依存）
-                self.loadCurrentSemester()
-                
-                // 3. 時間割を読み込み（currentSemesterに依存）
-                if self.currentSemester != nil {
-                    self.loadTimetable()
-                }
-                
-                // 4. 初期化完了
-                self.isInitialized = true
-                self.initializationError = nil
-                self.objectWillChange.send()
-                
-                print("AttendanceViewModel initialization completed successfully")
-                print("Available semesters: \(self.availableSemesters.count)")
-                print("Current semester: \(self.currentSemester?.name ?? "none")")
-                
-            } catch {
-                print("AttendanceViewModel initialization failed: \(error)")
-                self.initializationError = "初期化に失敗しました: \(error.localizedDescription)"
-                self.errorBanner = ErrorBannerInfo(
-                    message: "アプリの初期化に失敗しました。再起動してください。",
-                    type: .systemError
-                )
-                self.isInitialized = false
+            // 1. 学期のセットアップ（必須）
+            self.setupSemesters()
+            
+            // 2. 現在の学期を読み込み（setupSemestersの結果に依存）
+            self.loadCurrentSemester()
+            
+            // 3. 時間割を読み込み（currentSemesterに依存）
+            if self.currentSemester != nil {
+                self.loadTimetable()
             }
+            
+            // 4. 初期化完了
+            self.isInitialized = true
+            self.initializationError = nil
+            self.objectWillChange.send()
+            
+            print("AttendanceViewModel initialization completed successfully")
+            print("Available semesters: \(self.availableSemesters.count)")
+            print("Current semester: \(self.currentSemester?.name ?? "none")")
         }
     }
     
@@ -145,12 +134,14 @@ class AttendanceViewModel: ObservableObject {
         case courseData
         case attendanceData
         case statisticsData
+        case semesterData
         
         var name: Notification.Name {
             switch self {
             case .courseData: return .courseDataDidChange
             case .attendanceData: return .attendanceDataDidChange
             case .statisticsData: return .statisticsDataDidChange
+            case .semesterData: return .semesterDataDidChange
             }
         }
     }

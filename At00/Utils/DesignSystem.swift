@@ -268,21 +268,23 @@ extension DesignSystem {
         let onDismiss: () -> Void
         
         enum ErrorType {
-            case error, warning, info
+            case error, warning, info, systemError, dataNotFound
             
             var color: Color {
                 switch self {
-                case .error: return .red
+                case .error, .systemError: return .red
                 case .warning: return .orange
                 case .info: return .blue
+                case .dataNotFound: return .purple
                 }
             }
             
             var icon: String {
                 switch self {
-                case .error: return "exclamationmark.circle.fill"
+                case .error, .systemError: return "exclamationmark.circle.fill"
                 case .warning: return "exclamationmark.triangle.fill"
                 case .info: return "info.circle.fill"
+                case .dataNotFound: return "questionmark.circle.fill"
                 }
             }
         }
