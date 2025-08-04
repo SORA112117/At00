@@ -20,8 +20,10 @@ struct TimetableView: View {
     @State private var showingPeriodEdit = false
     @State private var showingDuplicateAlert = false
     @State private var showingDailyLimitAlert = false
+    @State private var showingOutsidePeriodAlert = false
     @State private var duplicateCourseName = ""
     @State private var dailyLimitCourseName = ""
+    @State private var outsidePeriodCourseName = ""
     
     private let dayNames = ["月", "火", "水", "木", "金"]
     private let periods = ["1限", "2限", "3限", "4限", "5限"]
@@ -60,8 +62,10 @@ struct TimetableView: View {
                         
                         Divider()
                         
-                        NavigationLink("シート管理") {
-                            TimetableSheetManagementView()
+                        Button("シート管理") {
+                            // 設定タブに切り替えてシート管理ページを表示
+                            viewModel.selectedTab = 2  // 設定タブのインデックス
+                            viewModel.shouldNavigateToSheetManagement = true
                         }
                     } label: {
                         HStack(spacing: 4) {
@@ -116,6 +120,11 @@ struct TimetableView: View {
                 Button("OK") { }
             } message: {
                 Text("\(dailyLimitCourseName)は今日すべてのコマで欠席記録済みです")
+            }
+            .alert("学期期間外です", isPresented: $showingOutsidePeriodAlert) {
+                Button("OK") { }
+            } message: {
+                Text("今日の日付は\(outsidePeriodCourseName)の学期期間外です。\n欠席記録は学期期間内のみ可能です。")
             }
             .onChange(of: viewModel.errorMessage) { _, newValue in
                 showingErrorAlert = newValue != nil
@@ -186,20 +195,8 @@ struct TimetableView: View {
     
     @ViewBuilder
     private var semesterInfoView: some View {
-        if let semester = viewModel.currentSemester {
-            HStack {
-                Text(semester.name ?? "")
-                    .font(.headline)
-                    .foregroundColor(.primary)
-                Spacer()
-                Text("出席管理")
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
-            }
-            .padding(.horizontal)
-            .padding(.vertical, 8)
-            .background(Color(.systemGray6))
-        }
+        // 学期名は上部のボタンで表示されるため、このビューは削除
+        EmptyView()
     }
     
     private func timetableGridView(geometry: GeometryProxy) -> some View {
@@ -324,6 +321,15 @@ struct TimetableView: View {
                 // 強い警告ハプティックフィードバック
                 let notificationFeedback = UINotificationFeedbackGenerator()
                 notificationFeedback.notificationOccurred(.error)
+                
+            case .outsideSemesterPeriod:
+                // 学期期間外時にアラート表示
+                outsidePeriodCourseName = course.courseName ?? ""
+                showingOutsidePeriodAlert = true
+                
+                // 警告ハプティックフィードバック
+                let notificationFeedback = UINotificationFeedbackGenerator()
+                notificationFeedback.notificationOccurred(.warning)
             }
         }
         

@@ -17,6 +17,9 @@ struct AddTimetableSheetView: View {
     @State private var selectedSemesterType: SemesterType = .firstHalf
     @State private var showingErrorAlert = false
     @State private var errorMessage = ""
+    @State private var startDate = Date()
+    @State private var endDate = Date()
+    @State private var showingDatePickers = false
     
     // 年度選択の範囲（現在年から前後3年）
     private var availableYears: [Int] {
@@ -50,6 +53,13 @@ struct AddTimetableSheetView: View {
                         }
                         .pickerStyle(WheelPickerStyle())
                         .frame(height: 120)
+                        .onChange(of: selectedYear) { _, _ in
+                            // 年度が変更されたら期間を再計算
+                            if !showingDatePickers {
+                                startDate = getSemesterStartDate()
+                                endDate = getSemesterEndDate()
+                            }
+                        }
                     }
                     .padding(.vertical, 4)
                     
@@ -63,30 +73,50 @@ struct AddTimetableSheetView: View {
                             Text("後期").tag(SemesterType.secondHalf)
                         }
                         .pickerStyle(SegmentedPickerStyle())
+                        .onChange(of: selectedSemesterType) { _, _ in
+                            // 学期が変更されたら期間を再計算
+                            if !showingDatePickers {
+                                startDate = getSemesterStartDate()
+                                endDate = getSemesterEndDate()
+                            }
+                        }
                     }
                     .padding(.vertical, 4)
                 }
                 
                 Section("期間設定") {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("期間")
-                            .font(.headline)
-                        
-                        HStack {
-                            Text("開始:")
-                            Text(formatDate(getSemesterStartDate()))
-                                .foregroundColor(.secondary)
-                            
-                            Spacer()
-                            
-                            Text("終了:")
-                            Text(formatDate(getSemesterEndDate()))
-                                .foregroundColor(.secondary)
+                    Toggle("期間を手動で設定", isOn: $showingDatePickers)
+                        .onChange(of: showingDatePickers) { _, isOn in
+                            if !isOn {
+                                // 自動設定に戻す
+                                startDate = getSemesterStartDate()
+                                endDate = getSemesterEndDate()
+                            }
                         }
-                        .font(.subheadline)
-                    }
-                    .padding(.vertical, 4)
                     
+                    if showingDatePickers {
+                        DatePicker("開始日", selection: $startDate, displayedComponents: .date)
+                        DatePicker("終了日", selection: $endDate, displayedComponents: .date)
+                    } else {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("期間（自動設定）")
+                                .font(.headline)
+                            
+                            HStack {
+                                Text("開始:")
+                                Text(formatDate(startDate))
+                                    .foregroundColor(.secondary)
+                                
+                                Spacer()
+                                
+                                Text("終了:")
+                                Text(formatDate(endDate))
+                                    .foregroundColor(.secondary)
+                            }
+                            .font(.subheadline)
+                        }
+                        .padding(.vertical, 4)
+                    }
                 }
                 
                 // 既存シートとの関係性
@@ -106,19 +136,15 @@ struct AddTimetableSheetView: View {
                             
                             Spacer()
                             
-                            Text("通年科目同期")
+                            Text("ペア")
                                 .font(.caption)
                                 .padding(.horizontal, 8)
                                 .padding(.vertical, 4)
-                                .background(Color.green)
+                                .background(Color.blue.opacity(0.8))
                                 .foregroundColor(.white)
                                 .cornerRadius(8)
                         }
                         .padding(.vertical, 4)
-                        
-                        Text("このシートと\(pairedSemester.name ?? "")は通年科目が自動的に同期されます")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
                     }
                 }
             }
@@ -143,6 +169,10 @@ struct AddTimetableSheetView: View {
             } message: {
                 Text(errorMessage)
             }
+        }
+        .onAppear {
+            startDate = getSemesterStartDate()
+            endDate = getSemesterEndDate()
         }
     }
     

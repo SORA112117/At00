@@ -14,9 +14,11 @@ struct SettingsView: View {
     @EnvironmentObject private var viewModel: AttendanceViewModel
     @State private var showingResetConfirmation = false
     @State private var selectedSemesterForReset: Semester?
+    @Binding var shouldNavigateToSheetManagement: Bool
+    @State private var navigationPath = NavigationPath()
     
     var body: some View {
-        NavigationView {
+        NavigationStack(path: $navigationPath) {
             List {
                 // 出席設定セクション
                 Section("出席設定") {
@@ -38,15 +40,18 @@ struct SettingsView: View {
                 
                 // データ管理セクション
                 Section("データ管理") {
-                    NavigationLink("時間割シート管理") {
-                        TimetableSheetManagementView()
-                    }
+                    NavigationLink("時間割シート管理", value: "シート管理")
                     .foregroundColor(.blue)
                     
                     NavigationLink("学期別時間割リセット") {
                         SemesterResetView(viewModel: viewModel)
                     }
                     .foregroundColor(.orange)
+                    
+                    Button("アプリを初期状態にリセット") {
+                        showingResetConfirmation = true
+                    }
+                    .foregroundColor(.red)
                 }
                 
                 // アプリ情報セクション
@@ -62,6 +67,30 @@ struct SettingsView: View {
             }
             .navigationTitle("設定")
             .navigationBarTitleDisplayMode(.large)
+            .navigationDestination(for: String.self) { destination in
+                if destination == "シート管理" {
+                    TimetableSheetManagementView()
+                }
+            }
+        }
+        .onChange(of: shouldNavigateToSheetManagement) { _, newValue in
+            if newValue {
+                // シート管理ページに遷移
+                navigationPath.append("シート管理")
+                
+                // フラグをリセット
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                    shouldNavigateToSheetManagement = false
+                }
+            }
+        }
+        .alert("アプリを初期状態にリセット", isPresented: $showingResetConfirmation) {
+            Button("リセット", role: .destructive) {
+                viewModel.resetToDefaultSemester()
+            }
+            Button("キャンセル", role: .cancel) {}
+        } message: {
+            Text("すべてのデータ（授業、欠席記録、設定）が削除され、現在の期間に適した学期シートのみが作成されます。\n\nこの操作は取り消せません。")
         }
     }
 }
@@ -403,6 +432,7 @@ struct TimetableSheetManagementView: View {
     @State private var showingDeleteConfirmation = false
     @State private var sheetToEdit: Semester?
     @State private var sheetToDelete: Semester?
+    @State private var showingCannotDeleteLastSheetAlert = false
     
     var body: some View {
         List {
@@ -422,8 +452,12 @@ struct TimetableSheetManagementView: View {
                             showingEditSheet = true
                         },
                         onDelete: {
-                            sheetToDelete = semester
-                            showingDeleteConfirmation = true
+                            if viewModel.availableSemesters.count <= 1 {
+                                showingCannotDeleteLastSheetAlert = true
+                            } else {
+                                sheetToDelete = semester
+                                showingDeleteConfirmation = true
+                            }
                         }
                     )
                 }
@@ -457,6 +491,11 @@ struct TimetableSheetManagementView: View {
             if let semester = sheetToDelete {
                 Text("\(semester.name ?? "")を削除しますか？\n\nこのシートの授業データと欠席記録がすべて削除されます。この操作は取り消せません。")
             }
+        }
+        .alert("削除できません", isPresented: $showingCannotDeleteLastSheetAlert) {
+            Button("OK") {}
+        } message: {
+            Text("最後の時間割シートは削除できません。\nアプリには少なくとも1つの時間割シートが必要です。")
         }
     }
     
@@ -667,5 +706,5 @@ struct SemesterSelectionRow: View {
 }
 
 #Preview {
-    SettingsView()
+    SettingsView(shouldNavigateToSheetManagement: .constant(false))
 }

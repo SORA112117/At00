@@ -16,6 +16,9 @@ struct EditTimetableSheetView: View {
     @State private var sheetName = ""
     @State private var showingErrorAlert = false
     @State private var errorMessage = ""
+    @State private var startDate = Date()
+    @State private var endDate = Date()
+    @State private var showingDatePickers = false
     
     var body: some View {
         NavigationView {
@@ -39,24 +42,31 @@ struct EditTimetableSheetView: View {
                     }
                     .padding(.vertical, 4)
                     
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("期間")
-                            .font(.headline)
-                        
-                        HStack {
-                            Text("開始:")
-                            Text(formatDate(semester.startDate))
-                                .foregroundColor(.secondary)
+                    Toggle("期間を変更", isOn: $showingDatePickers)
+                    
+                    if showingDatePickers {
+                        DatePicker("開始日", selection: $startDate, displayedComponents: .date)
+                        DatePicker("終了日", selection: $endDate, displayedComponents: .date)
+                    } else {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("現在の期間")
+                                .font(.headline)
                             
-                            Spacer()
-                            
-                            Text("終了:")
-                            Text(formatDate(semester.endDate))
-                                .foregroundColor(.secondary)
+                            HStack {
+                                Text("開始:")
+                                Text(formatDate(startDate))
+                                    .foregroundColor(.secondary)
+                                
+                                Spacer()
+                                
+                                Text("終了:")
+                                Text(formatDate(endDate))
+                                    .foregroundColor(.secondary)
+                            }
+                            .font(.subheadline)
                         }
-                        .font(.subheadline)
+                        .padding(.vertical, 4)
                     }
-                    .padding(.vertical, 4)
                 }
                 
                 Section("統計情報") {
@@ -92,11 +102,11 @@ struct EditTimetableSheetView: View {
                             
                             Spacer()
                             
-                            Text("通年科目同期")
+                            Text("ペア")
                                 .font(.caption)
                                 .padding(.horizontal, 8)
                                 .padding(.vertical, 4)
-                                .background(Color.green)
+                                .background(Color.blue.opacity(0.8))
                                 .foregroundColor(.white)
                                 .cornerRadius(8)
                         }
@@ -128,6 +138,8 @@ struct EditTimetableSheetView: View {
         }
         .onAppear {
             sheetName = semester.name ?? ""
+            startDate = semester.startDate ?? Date()
+            endDate = semester.endDate ?? Date()
         }
     }
     
@@ -209,8 +221,17 @@ struct EditTimetableSheetView: View {
             return
         }
         
-        // 名前を更新
+        // 名前と期間を更新
         semester.name = trimmedName
+        if showingDatePickers {
+            semester.startDate = startDate
+            semester.endDate = endDate
+            
+            // ペアシートの期間も更新
+            if let pairedSemester = findPairedSemester() {
+                updatePairedSemesterDates(pairedSemester)
+            }
+        }
         
         // 保存
         do {
@@ -223,6 +244,34 @@ struct EditTimetableSheetView: View {
         } catch {
             errorMessage = "時間割シートの更新に失敗しました: \(error.localizedDescription)"
             showingErrorAlert = true
+        }
+    }
+    
+    /// ペアシートの期間を更新
+    private func updatePairedSemesterDates(_ pairedSemester: Semester) {
+        guard let semesterTypeString = semester.semesterType,
+              let semesterType = SemesterType(rawValue: semesterTypeString) else {
+            return
+        }
+        
+        if semesterType == .firstHalf {
+            // 前期シートを編集した場合、後期シートの期間を前期に基づいて調整
+            pairedSemester.startDate = Calendar.current.date(byAdding: .day, value: 1, to: endDate)
+            
+            // 後期の期間を前期の期間の長さに基づいて設定
+            let firstHalfDuration = Calendar.current.dateComponents([.day], from: startDate, to: endDate).day ?? 0
+            if let pairStart = pairedSemester.startDate {
+                pairedSemester.endDate = Calendar.current.date(byAdding: .day, value: firstHalfDuration, to: pairStart)
+            }
+        } else {
+            // 後期シートを編集した場合、前期シートの期間を後期に基づいて調整
+            pairedSemester.endDate = Calendar.current.date(byAdding: .day, value: -1, to: startDate)
+            
+            // 前期の期間を後期の期間の長さに基づいて設定
+            let secondHalfDuration = Calendar.current.dateComponents([.day], from: startDate, to: endDate).day ?? 0
+            if let pairEnd = pairedSemester.endDate {
+                pairedSemester.startDate = Calendar.current.date(byAdding: .day, value: -secondHalfDuration, to: pairEnd)
+            }
         }
     }
 }

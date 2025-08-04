@@ -13,6 +13,8 @@ struct RecordDetailView: View {
     @Binding var selectedType: AttendanceType
     @Binding var memo: String
     @Environment(\.dismiss) private var dismiss
+    @State private var showingErrorAlert = false
+    @State private var errorMessage = ""
     
     var body: some View {
         NavigationView {
@@ -75,8 +77,21 @@ struct RecordDetailView: View {
                 
                 // 記録ボタン
                 Button(action: {
-                    _ = viewModel.recordAbsence(for: course, type: selectedType, memo: memo)
-                    dismiss()
+                    let result = viewModel.recordAbsence(for: course, type: selectedType, memo: memo)
+                    
+                    switch result {
+                    case .success:
+                        dismiss()
+                    case .alreadyRecorded:
+                        errorMessage = "今日の欠席は既に記録されています。"
+                        showingErrorAlert = true
+                    case .dailyLimitReached:
+                        errorMessage = "今日はすべてのコマで欠席記録済みです。"
+                        showingErrorAlert = true
+                    case .outsideSemesterPeriod:
+                        errorMessage = "今日の日付は学期期間外です。\n欠席記録は学期期間内のみ可能です。"
+                        showingErrorAlert = true
+                    }
                 }) {
                     HStack {
                         Image(systemName: "checkmark.circle.fill")
@@ -92,6 +107,11 @@ struct RecordDetailView: View {
             .padding()
             .navigationTitle("詳細記録")
             .navigationBarTitleDisplayMode(.inline)
+            .alert("エラー", isPresented: $showingErrorAlert) {
+                Button("OK") {}
+            } message: {
+                Text(errorMessage)
+            }
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button("キャンセル") {

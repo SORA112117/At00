@@ -7,7 +7,10 @@
       "Bash(git add:*)",
       "Bash(git push:*)",
       "Bash(swiftc:*)",
-      "Bash(git commit:*)"
+      "Bash(git commit:*)",
+      "Bash(awk:*)",
+      "Bash(python3:*)",
+      "Bash(git checkout:*)"
     ],
     "deny": []
   }

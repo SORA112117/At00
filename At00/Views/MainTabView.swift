@@ -8,12 +8,11 @@
 import SwiftUI
 
 struct MainTabView: View {
-    @State private var selectedTab = 0
     @EnvironmentObject private var viewModel: AttendanceViewModel
     
     var body: some View {
         ZStack {
-            TabView(selection: $selectedTab) {
+            TabView(selection: $viewModel.selectedTab) {
             TimetableView()
                 .tabItem {
                     Image(systemName: "calendar")
@@ -32,7 +31,7 @@ struct MainTabView: View {
                 .accessibilityLabel("統計タブ")
                 .accessibilityHint("出席統計とグラフを表示")
             
-            SettingsView()
+            SettingsView(shouldNavigateToSheetManagement: $viewModel.shouldNavigateToSheetManagement)
                 .tabItem {
                     Image(systemName: "gearshape.fill")
                     Text("設定")

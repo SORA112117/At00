@@ -42,6 +42,10 @@ class AttendanceViewModel: ObservableObject {
     @Published var currentSemesterType: SemesterType = .firstHalf
     @Published var availableSemesters: [Semester] = []
     
+    // タブ遷移管理
+    @Published var selectedTab: Int = 0
+    @Published var shouldNavigateToSheetManagement = false
+    
     let persistenceController: PersistenceController
     private let context: NSManagedObjectContext
     private let backgroundContext: NSManagedObjectContext
@@ -65,19 +69,13 @@ class AttendanceViewModel: ObservableObject {
     // 非同期初期化処理
     @MainActor
     private func initializeData() async {
-        // Core Data操作をバックグラウンドコンテキストで実行
-        await backgroundContext.perform {
-            self.setupSemesters()
-        }
-        
-        // メインコンテキストでUIデータ読み込み
-        await MainActor.run {
-            self.loadCurrentSemester()
-            self.loadTimetable()
-            self.isInitialized = true
-            self.objectWillChange.send()
-            print("AttendanceViewModel initialization completed")
-        }
+        // すべての操作をメインコンテキストで実行して同期を確保
+        setupSemesters()
+        loadCurrentSemester()
+        loadTimetable()
+        isInitialized = true
+        objectWillChange.send()
+        print("AttendanceViewModel initialization completed")
     }
     
     // 欠席数キャッシュ
@@ -280,11 +278,17 @@ class AttendanceViewModel: ObservableObject {
         case success
         case alreadyRecorded
         case dailyLimitReached
+        case outsideSemesterPeriod
     }
     
     // 欠席を記録（代表的なCourseに1つのみ作成）
     func recordAbsence(for course: Course, type: AttendanceType = .absent, memo: String = "", date: Date = Date()) -> RecordResult {
         guard let courseName = course.courseName else { return .alreadyRecorded }
+        
+        // 学期の期間内かチェック
+        if !isDateWithinCurrentSemesterPeriod(date) {
+            return .outsideSemesterPeriod
+        }
         
         let calendar = Calendar.current
         _ = calendar.startOfDay(for: date)
@@ -694,6 +698,22 @@ class AttendanceViewModel: ObservableObject {
         _ = recordAbsence(for: course, type: type, memo: memo, date: date)
     }
     
+    // 指定した日付が現在の学期の期間内かチェック
+    func isDateWithinCurrentSemesterPeriod(_ date: Date) -> Bool {
+        guard let semester = currentSemester,
+              let startDate = semester.startDate,
+              let endDate = semester.endDate else {
+            return false
+        }
+        
+        let calendar = Calendar.current
+        let checkDate = calendar.startOfDay(for: date)
+        let semesterStart = calendar.startOfDay(for: startDate)
+        let semesterEnd = calendar.startOfDay(for: endDate)
+        
+        return checkDate >= semesterStart && checkDate <= semesterEnd
+    }
+    
     // データを保存（外部からアクセス可能）
     func save() {
         saveContext()
@@ -807,17 +827,119 @@ class AttendanceViewModel: ObservableObject {
     
     // 学期の初期設定
     func setupSemesters() {
-        loadAllSemesters()
+        // データベースに学期が存在するかを直接チェック
+        let request: NSFetchRequest<Semester> = Semester.fetchRequest()
+        request.fetchLimit = 1 // 1つでもあれば十分
         
-        // 前期・後期の学期がなければ作成
-        if !hasSemester(of: .firstHalf) {
-            createSemester(type: .firstHalf, name: "2025年度前期")
+        do {
+            let existingSemesters = try context.fetch(request)
+            
+            // データベースが完全に空の場合のみデフォルト学期を作成
+            if existingSemesters.isEmpty {
+                print("データベースが空のため、デフォルト学期を作成します")
+                createDefaultSemester()
+            } else {
+                print("既存の学期が見つかりました（\(existingSemesters.count)個存在）")
+            }
+            
+            // 全ての学期を読み込んでUIを更新
+            loadAllSemesters()
+            
+        } catch {
+            print("学期チェックエラー: \(error)")
+            DispatchQueue.main.async {
+                self.errorMessage = "学期データの確認に失敗しました: \(error.localizedDescription)"
+            }
         }
-        if !hasSemester(of: .secondHalf) {
-            createSemester(type: .secondHalf, name: "2025年度後期")
+    }
+    
+    // データベースを完全にリセットして、デフォルト学期のみを作成
+    func resetToDefaultSemester() {
+        // 全ての既存データを削除
+        deleteAllData()
+        
+        // デフォルト学期を作成
+        createDefaultSemester()
+        
+        // データを再読み込み
+        loadAllSemesters()
+        loadCurrentSemester()
+        loadTimetable()
+        
+        // 通知を送信
+        DispatchQueue.main.async {
+            self.objectWillChange.send()
         }
         
-        loadAllSemesters()
+        print("データベースを初期状態にリセットしました")
+    }
+    
+    // デフォルト学期を作成
+    private func createDefaultSemester() {
+        let currentSemesterType = getCurrentSemesterType()
+        let currentYear = Calendar.current.component(.year, from: Date())
+        let semesterName = "\(currentYear)年度\(currentSemesterType == .firstHalf ? "前期" : "後期")"
+        
+        createSemester(type: currentSemesterType, name: semesterName)
+        
+        // 確実に保存
+        saveContext()
+        
+        print("デフォルト学期を作成しました: \(semesterName)")
+    }
+    
+    // 全てのデータを削除
+    private func deleteAllData() {
+        // 出席記録を削除
+        let attendanceRequest: NSFetchRequest<NSFetchRequestResult> = AttendanceRecord.fetchRequest()
+        let attendanceDeleteRequest = NSBatchDeleteRequest(fetchRequest: attendanceRequest)
+        
+        // 授業を削除
+        let courseRequest: NSFetchRequest<NSFetchRequestResult> = Course.fetchRequest()
+        let courseDeleteRequest = NSBatchDeleteRequest(fetchRequest: courseRequest)
+        
+        // 学期を削除
+        let semesterRequest: NSFetchRequest<NSFetchRequestResult> = Semester.fetchRequest()
+        let semesterDeleteRequest = NSBatchDeleteRequest(fetchRequest: semesterRequest)
+        
+        // 時間設定を削除
+        let periodTimeRequest: NSFetchRequest<NSFetchRequestResult> = PeriodTime.fetchRequest()
+        let periodTimeDeleteRequest = NSBatchDeleteRequest(fetchRequest: periodTimeRequest)
+        
+        do {
+            try context.execute(attendanceDeleteRequest)
+            try context.execute(courseDeleteRequest)
+            try context.execute(semesterDeleteRequest)
+            try context.execute(periodTimeDeleteRequest)
+            
+            saveContext()
+            
+            // キャッシュをクリア
+            DispatchQueue.main.async {
+                self.absenceCountCache.removeAll()
+                self.availableSemesters.removeAll()
+                self.currentSemester = nil
+                self.timetable = Array(repeating: Array(repeating: nil, count: 5), count: 5)
+            }
+            
+            print("全データを削除しました")
+        } catch {
+            print("データ削除エラー: \(error)")
+        }
+    }
+    
+    // 現在の日付に基づいて適切な学期タイプを判定
+    private func getCurrentSemesterType() -> SemesterType {
+        let calendar = Calendar.current
+        let now = Date()
+        let month = calendar.component(.month, from: now)
+        
+        // 4月〜9月: 前期, 10月〜3月: 後期
+        if month >= 4 && month <= 9 {
+            return .firstHalf
+        } else {
+            return .secondHalf
+        }
     }
     
     // すべての学期を読み込む
@@ -850,7 +972,7 @@ class AttendanceViewModel: ObservableObject {
         semester.semesterId = UUID()
         semester.name = name
         semester.semesterType = type.rawValue
-        semester.isActive = (type == .firstHalf) // デフォルトは前期をアクティブに
+        semester.isActive = true // 初回作成時は常にアクティブに設定
         semester.createdAt = Date()
         
         let calendar = Calendar.current
