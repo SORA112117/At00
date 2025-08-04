@@ -251,6 +251,7 @@ struct CustomTimePicker: View {
     
     @State private var selectedHour: Int = 9
     @State private var selectedMinute: Int = 0
+    @State private var isInitialized = false
     
     private let hours = Array(6...23) // 6:00 - 23:00
     private var minutes: [Int] {
@@ -297,10 +298,15 @@ struct CustomTimePicker: View {
             updateSelection()
         }
         .onChange(of: selection) { _, newDate in
-            updateFromDate(newDate)
+            if isInitialized {
+                updateFromDate(newDate)
+            }
         }
         .onAppear {
-            updateFromDate(selection)
+            if !isInitialized {
+                updateFromDate(selection)
+                isInitialized = true
+            }
         }
     }
     
@@ -314,18 +320,23 @@ struct CustomTimePicker: View {
     
     private func updateFromDate(_ date: Date) {
         let calendar = Calendar.current
-        selectedHour = calendar.component(.hour, from: date)
+        let hour = calendar.component(.hour, from: date)
         let minute = calendar.component(.minute, from: date)
         
         // 最も近い5分刻みの値に調整
         let roundedMinute = (minute / minuteInterval) * minuteInterval
+        
+        // ピッカーの値を更新（初期化時は無限ループを避ける）
+        selectedHour = hour
         selectedMinute = roundedMinute
         
-        // 調整後の時間で選択を更新
-        let components = DateComponents(hour: selectedHour, minute: roundedMinute)
-        if let adjustedDate = calendar.date(from: components) {
-            DispatchQueue.main.async {
-                selection = adjustedDate
+        // 初期化時以外は選択値を更新
+        if isInitialized {
+            let components = DateComponents(hour: hour, minute: roundedMinute)
+            if let adjustedDate = calendar.date(from: components) {
+                DispatchQueue.main.async {
+                    selection = adjustedDate
+                }
             }
         }
     }

@@ -18,6 +18,7 @@ struct TimetableView: View {
     @State private var showingCourseEditDetail = false
     @State private var selectedPeriod: Int?
     @State private var showingPeriodEdit = false
+    @State private var activeSheet: SheetType? = nil
     @State private var showingDuplicateAlert = false
     @State private var showingDailyLimitAlert = false
     @State private var showingOutsidePeriodAlert = false
@@ -29,11 +30,63 @@ struct TimetableView: View {
     private let periods = ["1限", "2限", "3限", "4限", "5限"]
     @State private var timeSlots = ["9:00-10:30", "10:40-12:10", "13:00-14:30", "14:40-16:10", "16:20-17:50"]
     
+    enum SheetType: Identifiable, Equatable {
+        case addCourse(TimeSlot)
+        case editCourse(Course)
+        case periodTimeSettings
+        case periodEdit(Int)
+        
+        var id: String {
+            switch self {
+            case .addCourse(let timeSlot): return "addCourse-\(timeSlot.day)-\(timeSlot.period)"
+            case .editCourse(let course): return "editCourse-\(course.objectID)"
+            case .periodTimeSettings: return "periodTimeSettings"
+            case .periodEdit(let period): return "periodEdit-\(period)"
+            }
+        }
+        
+        static func == (lhs: SheetType, rhs: SheetType) -> Bool {
+            return lhs.id == rhs.id
+        }
+    }
+    
+    struct TimeSlot: Equatable {
+        let day: Int
+        let period: Int
+    }
+    
     var body: some View {
+        mainContentView
+            .sheet(item: $activeSheet, content: sheetContent)
+            .modifier(TimetableAlertsModifier(
+                showingErrorAlert: $showingErrorAlert,
+                showingDuplicateAlert: $showingDuplicateAlert,
+                showingDailyLimitAlert: $showingDailyLimitAlert,
+                showingOutsidePeriodAlert: $showingOutsidePeriodAlert,
+                duplicateCourseName: duplicateCourseName,
+                dailyLimitCourseName: dailyLimitCourseName,
+                outsidePeriodCourseName: outsidePeriodCourseName,
+                viewModel: viewModel
+            ))
+            .onChange(of: activeSheet) { _, sheet in
+                if sheet == nil {
+                    loadTimeSlots()
+                    selectedTimeSlot = nil
+                }
+            }
+            .onAppear { loadTimeSlots() }
+            .onChange(of: viewModel.currentSemester?.semesterId) { _, _ in loadTimeSlots() }
+            .task { loadTimeSlots() }
+            .onReceive(NotificationCenter.default.publisher(for: .attendanceDataDidChange)) { _ in
+                DispatchQueue.main.async { viewModel.objectWillChange.send() }
+            }
+    }
+    
+    @ViewBuilder
+    private var mainContentView: some View {
         NavigationView {
             GeometryReader { geometry in
                 VStack(spacing: 0) {
-                    semesterInfoView
                     timetableGridView(geometry: geometry)
                     Spacer()
                 }
@@ -42,162 +95,97 @@ struct TimetableView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
-                    Menu {
-                        ForEach(viewModel.availableSemesters, id: \.semesterId) { semester in
-                            Button(action: {
-                                withAnimation(.easeInOut(duration: 0.3)) {
-                                    viewModel.switchToSemester(semester)
-                                }
-                            }) {
-                                HStack {
-                                    Text(semester.name ?? "")
-                                    Spacer()
-                                    if viewModel.currentSemester?.semesterId == semester.semesterId {
-                                        Image(systemName: "checkmark")
-                                            .foregroundColor(.blue)
-                                    }
-                                }
-                            }
-                        }
-                        
-                        Divider()
-                        
-                        Button("シート管理") {
-                            // 設定タブに切り替えてシート管理ページを表示
-                            viewModel.selectedTab = 2  // 設定タブのインデックス
-                            viewModel.shouldNavigateToSheetManagement = true
-                        }
-                    } label: {
-                        HStack(spacing: 4) {
-                            Image(systemName: "calendar")
-                            Text(viewModel.currentSemester?.name ?? "シート選択")
-                                .font(.subheadline)
-                                .fontWeight(.medium)
-                        }
-                        .foregroundColor(.blue)
-                    }
+                    semesterSelectionMenu
                 }
-            }
-            .sheet(isPresented: $showingAddCourse, onDismiss: {
-                // シートが閉じられた時にタイムスロットをリセット
-                selectedTimeSlot = nil
-            }) {
-                if let timeSlot = selectedTimeSlot {
-                    NavigationView {
-                        CourseSelectionView(
-                            dayOfWeek: timeSlot.day,
-                            period: timeSlot.period,
-                            viewModel: viewModel
-                        )
-                        .onAppear {
-                            // シート表示時にViewModelの初期化を確実に実行
-                            print("TimetableView: CourseSelectionViewシート表示開始")
-                            if !viewModel.isInitialized || viewModel.currentSemester == nil {
-                                print("TimetableView: ViewModelの緊急初期化を実行")
-                                viewModel.loadCurrentSemester()
-                                viewModel.loadTimetable()
-                            }
-                        }
-                    }
-                    .navigationViewStyle(StackNavigationViewStyle())
-                    .id("\(timeSlot.day)-\(timeSlot.period)") // 一意のIDで強制的に再生成
-                }
-            }
-            .alert("エラー", isPresented: $showingErrorAlert) {
-                Button("OK") {
-                    viewModel.errorMessage = nil
-                    showingErrorAlert = false
-                }
-            } message: {
-                Text(viewModel.errorMessage ?? "")
-            }
-            .alert("記録済み", isPresented: $showingDuplicateAlert) {
-                Button("OK") { }
-            } message: {
-                Text("\(duplicateCourseName)の今日の欠席は既に記録されています")
-            }
-            .alert("1日の記録上限に到達", isPresented: $showingDailyLimitAlert) {
-                Button("OK") { }
-            } message: {
-                Text("\(dailyLimitCourseName)は今日すべてのコマで欠席記録済みです")
-            }
-            .alert("学期期間外です", isPresented: $showingOutsidePeriodAlert) {
-                Button("OK") { }
-            } message: {
-                Text("今日の日付は\(outsidePeriodCourseName)の学期期間外です。\n欠席記録は学期期間内のみ可能です。")
-            }
-            .onChange(of: viewModel.errorMessage) { _, newValue in
-                showingErrorAlert = newValue != nil
-            }
-            .sheet(isPresented: $showingPeriodTimeSettings) {
-                PeriodTimeSettingsView()
-            }
-            .onChange(of: showingPeriodTimeSettings) { _, isShowing in
-                if !isShowing {
-                    // 設定画面が閉じられたときに時間を再読み込み
-                    loadTimeSlots()
-                }
-            }
-            .sheet(isPresented: $showingCourseEditDetail) {
-                if let course = selectedCourse {
-                    NavigationView {
-                        EditCourseDetailView(course: course, viewModel: viewModel)
-                            .onAppear {
-                                // 編集画面表示時にViewModelの初期化を確実に実行
-                                print("TimetableView: EditCourseDetailViewシート表示開始")
-                                if !viewModel.isInitialized || viewModel.currentSemester == nil {
-                                    print("TimetableView: 編集画面でViewModelの緊急初期化を実行")
-                                    viewModel.loadCurrentSemester()
-                                    viewModel.loadTimetable()
-                                }
-                            }
-                    }
-                    .navigationViewStyle(StackNavigationViewStyle())
-                }
-            }
-            .sheet(isPresented: $showingPeriodEdit) {
-                if let period = selectedPeriod {
-                    SinglePeriodEditView(period: period, viewModel: viewModel)
-                }
-            }
-            .onChange(of: showingPeriodEdit) { _, isShowing in
-                if !isShowing {
-                    // 個別時限編集画面が閉じられたときも時間を再読み込み
-                    loadTimeSlots()
-                }
-            }
-        }
-        .onAppear {
-            loadTimeSlots()
-        }
-        .onChange(of: viewModel.currentSemester?.semesterId) { _, _ in
-            // 学期が変更されたときも時間を再読み込み
-            loadTimeSlots()
-        }
-        .task {
-            // タブ切り替え時にも確実に更新
-            loadTimeSlots()
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .courseDataDidChange)) { _ in
-            // コースデータ変更時の即座更新
-            DispatchQueue.main.async {
-                viewModel.loadTimetable()
-                viewModel.objectWillChange.send()
-            }
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .attendanceDataDidChange)) { _ in
-            // 欠席データ変更時の即座更新
-            DispatchQueue.main.async {
-                viewModel.objectWillChange.send()
             }
         }
     }
     
     @ViewBuilder
-    private var semesterInfoView: some View {
-        // 学期名は上部のボタンで表示されるため、このビューは削除
-        EmptyView()
+    private var semesterSelectionMenu: some View {
+        Menu {
+            ForEach(viewModel.availableSemesters, id: \.semesterId) { semester in
+                Button(action: {
+                    withAnimation(.easeInOut(duration: 0.3)) {
+                        viewModel.switchToSemester(semester)
+                    }
+                }) {
+                    HStack {
+                        Text(semester.name ?? "")
+                        Spacer()
+                        if viewModel.currentSemester?.semesterId == semester.semesterId {
+                            Image(systemName: "checkmark")
+                                .foregroundColor(.blue)
+                        }
+                    }
+                }
+            }
+            
+            Divider()
+            
+            Button("シート管理") {
+                // 設定タブに切り替えてシート管理ページを表示
+                viewModel.selectedTab = 2  // 設定タブのインデックス
+                viewModel.shouldNavigateToSheetManagement = true
+            }
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: "calendar")
+                Text(viewModel.currentSemester?.name ?? "シート選択")
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+            }
+            .foregroundColor(.blue)
+        }
     }
+    
+    @ViewBuilder
+    private func sheetContent(for sheetType: SheetType) -> some View {
+        switch sheetType {
+        case .addCourse(let timeSlot):
+            NavigationView {
+                CourseSelectionView(
+                    dayOfWeek: timeSlot.day,
+                    period: timeSlot.period,
+                    viewModel: viewModel
+                )
+                .onAppear {
+                    // シート表示時にViewModelの初期化を確実に実行
+                    print("TimetableView: CourseSelectionViewシート表示開始")
+                    if !viewModel.isInitialized || viewModel.currentSemester == nil {
+                        print("TimetableView: ViewModelの緊急初期化を実行")
+                        viewModel.loadCurrentSemester()
+                        viewModel.loadTimetable()
+                    }
+                }
+            }
+            .navigationViewStyle(StackNavigationViewStyle())
+            .id("\(timeSlot.day)-\(timeSlot.period)") // 一意のIDで強制的に再生成
+            
+        case .editCourse(let course):
+            NavigationView {
+                EditCourseDetailView(course: course, viewModel: viewModel)
+                    .onAppear {
+                        // 編集画面表示時にViewModelの初期化を確実に実行
+                        print("TimetableView: EditCourseDetailViewシート表示開始")
+                        if !viewModel.isInitialized || viewModel.currentSemester == nil {
+                            print("TimetableView: 編集画面でViewModelの緊急初期化を実行")
+                            viewModel.loadCurrentSemester()
+                            viewModel.loadTimetable()
+                        }
+                    }
+            }
+            .navigationViewStyle(StackNavigationViewStyle())
+            
+        case .periodTimeSettings:
+            PeriodTimeSettingsView()
+            
+        case .periodEdit(let period):
+            SinglePeriodEditView(period: period, viewModel: viewModel)
+        }
+    }
+    
+    // 学期情報表示は削除（重複のため）
     
     private func timetableGridView(geometry: GeometryProxy) -> some View {
         let spacing: CGFloat = 1
@@ -245,8 +233,9 @@ struct TimetableView: View {
     
     private func periodHeaderView(for periodIndex: Int, height: CGFloat) -> some View {
         Button {
-            selectedPeriod = periodIndex + 1  // 1-based period number
-            showingPeriodEdit = true
+            let period = periodIndex + 1  // 1-based period number
+            selectedPeriod = period
+            activeSheet = .periodEdit(period)
         } label: {
             VStack(spacing: 2) {
                 Text(periods[periodIndex])
@@ -275,15 +264,16 @@ struct TimetableView: View {
                     if let course = course {
                         handleCourseTap(course)
                     } else {
+                        let timeSlot = TimeSlot(day: dayIndex + 1, period: periodIndex + 1)
                         selectedTimeSlot = (day: dayIndex + 1, period: periodIndex + 1)
-                        showingAddCourse = true
+                        activeSheet = .addCourse(timeSlot)
                     }
                 },
                 onLongPress: {
                     if let course = course {
                         print("Long press detected for course: \(course.courseName ?? "Unknown")")
                         selectedCourse = course
-                        showingCourseEditDetail = true
+                        activeSheet = .editCourse(course)
                     }
                 }
             )
@@ -396,6 +386,48 @@ struct TimetableView: View {
         DispatchQueue.main.async {
             self.timeSlots = updatedSlots
         }
+    }
+}
+
+// MARK: - Alerts Modifier
+struct TimetableAlertsModifier: ViewModifier {
+    @Binding var showingErrorAlert: Bool
+    @Binding var showingDuplicateAlert: Bool
+    @Binding var showingDailyLimitAlert: Bool
+    @Binding var showingOutsidePeriodAlert: Bool
+    let duplicateCourseName: String
+    let dailyLimitCourseName: String
+    let outsidePeriodCourseName: String
+    @ObservedObject var viewModel: AttendanceViewModel
+    
+    func body(content: Content) -> some View {
+        content
+            .alert("エラー", isPresented: $showingErrorAlert) {
+                Button("OK") {
+                    viewModel.errorMessage = nil
+                    showingErrorAlert = false
+                }
+            } message: {
+                Text(viewModel.errorMessage ?? "")
+            }
+            .alert("記録済み", isPresented: $showingDuplicateAlert) {
+                Button("OK") { }
+            } message: {
+                Text("\(duplicateCourseName)の今日の欠席は既に記録されています")
+            }
+            .alert("1日の記録上限に到達", isPresented: $showingDailyLimitAlert) {
+                Button("OK") { }
+            } message: {
+                Text("\(dailyLimitCourseName)は今日すべてのコマで欠席記録済みです")
+            }
+            .alert("学期期間外です", isPresented: $showingOutsidePeriodAlert) {
+                Button("OK") { }
+            } message: {
+                Text("今日の日付は\(outsidePeriodCourseName)の学期期間外です。\n欠席記録は学期期間内のみ可能です。")
+            }
+            .onChange(of: viewModel.errorMessage) { _, newValue in
+                showingErrorAlert = newValue != nil
+            }
     }
 }
 
@@ -564,57 +596,55 @@ struct EnhancedCourseCell: View {
         return max(0, Int(course.maxAbsences) - absenceCount)
     }
     
+    /// カラーボックスグリッドを作成（パフォーマンス最適化版）
     private func createColorBoxGrid(course: Course, absenceCount: Int, cellWidth: CGFloat) -> some View {
         let maxAbsences = Int(course.maxAbsences)
-        // カラーボックスサイズを統一（通年・通常関係なく同じサイズ）
-        let boxSize: CGFloat = max(4, (cellWidth - 16) / 8) // 8列基準で統一
+        let boxSize: CGFloat = max(4, (cellWidth - 16) / 8) // 統一サイズ
+        let displayCount = min(5, maxAbsences) // 表示する最大数
         
-        return Group {
-            // 1行（最大欠席数まで表示）
-            HStack(spacing: 1) {
-                ForEach(0..<min(5, maxAbsences), id: \.self) { index in
-                    Rectangle()
-                        .fill(getColorBoxColor(course: course, index: index, absenceCount: absenceCount))
-                        .frame(width: boxSize, height: boxSize) // 完全な正方形
-                }
+        return HStack(spacing: 1) {
+            ForEach(0..<displayCount, id: \.self) { index in
+                Rectangle()
+                    .fill(getColorBoxColor(course: course, index: index, absenceCount: absenceCount))
+                    .frame(width: boxSize, height: boxSize)
             }
         }
     }
     
+    /// カラーボックスの色を計算（最適化版）
     private func getColorBoxColor(course: Course, index: Int, absenceCount: Int) -> Color {
+        guard index < absenceCount else {
+            return Color(.systemGray4) // 未欠席
+        }
+        
         let maxAbsences = Int(course.maxAbsences)
         
-        if index < absenceCount {
-            // 欠席した回数分
-            if absenceCount >= maxAbsences {
-                return .red // 限界到達：赤
-            } else if absenceCount == maxAbsences - 1 {
-                return .orange // 危険圏：オレンジ
-            } else {
-                return .green.opacity(0.7) // 安全圏：システム緑（ダークモード対応）
-            }
-        } else {
-            // まだ欠席していない部分：システムグレー（ダークモード対応）
-            return Color(.systemGray4)
+        // 欠席状況に応じた色を効率的に決定
+        switch absenceCount {
+        case maxAbsences...:
+            return .red // 限界到達
+        case (maxAbsences - 1):
+            return .orange // 危険圏
+        default:
+            return .green.opacity(0.7) // 安全圏
         }
     }
     
+    /// 授業名を制限（パフォーマンス最適化版）
     private func limitCourseName(_ name: String) -> String {
-        if name.count <= 6 {
+        let maxLength = 6
+        let maxTotalLength = 12
+        
+        switch name.count {
+        case 0...maxLength:
             return name
-        } else if name.count <= 12 {
-            // 6文字目まで表示し、7文字目で改行して2行表示
-            let firstLineEnd = name.index(name.startIndex, offsetBy: 6)
-            let firstLine = String(name[..<firstLineEnd])
-            let secondLine = String(name[firstLineEnd...])
-            return firstLine + "\n" + secondLine
-        } else {
-            // 12文字を超える場合は12文字で切り捨て
-            let firstLineEnd = name.index(name.startIndex, offsetBy: 6)
-            let secondLineEnd = name.index(name.startIndex, offsetBy: 12)
-            let firstLine = String(name[..<firstLineEnd])
-            let secondLine = String(name[firstLineEnd..<secondLineEnd])
-            return firstLine + "\n" + secondLine
+        case (maxLength + 1)...maxTotalLength:
+            let midIndex = name.index(name.startIndex, offsetBy: maxLength)
+            return String(name[..<midIndex]) + "\n" + String(name[midIndex...])
+        default:
+            let firstIndex = name.index(name.startIndex, offsetBy: maxLength)
+            let secondIndex = name.index(name.startIndex, offsetBy: maxTotalLength)
+            return String(name[..<firstIndex]) + "\n" + String(name[firstIndex..<secondIndex])
         }
     }
 }

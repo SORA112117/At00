@@ -38,6 +38,8 @@ struct AddTimetableSheetView: View {
                         
                         TextField("例: 2025年度前期", text: $sheetName)
                             .textFieldStyle(RoundedBorderTextFieldStyle())
+                            .keyboardType(.default)
+                            .disableAutocorrection(true)
                     }
                     .padding(.vertical, 4)
                     
@@ -119,34 +121,6 @@ struct AddTimetableSheetView: View {
                     }
                 }
                 
-                // 既存シートとの関係性
-                if let pairedSemester = findPairedSemester() {
-                    Section("関連する時間割シート") {
-                        HStack {
-                            Image(systemName: "link")
-                                .foregroundColor(.blue)
-                            
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text("ペアシート")
-                                    .font(.headline)
-                                Text(pairedSemester.name ?? "")
-                                    .font(.subheadline)
-                                    .foregroundColor(.secondary)
-                            }
-                            
-                            Spacer()
-                            
-                            Text("ペア")
-                                .font(.caption)
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 4)
-                                .background(Color.blue.opacity(0.8))
-                                .foregroundColor(.white)
-                                .cornerRadius(8)
-                        }
-                        .padding(.vertical, 4)
-                    }
-                }
             }
             .navigationTitle("時間割シート追加")
             .navigationBarTitleDisplayMode(.inline)
@@ -171,12 +145,23 @@ struct AddTimetableSheetView: View {
             }
         }
         .onAppear {
-            startDate = getSemesterStartDate()
-            endDate = getSemesterEndDate()
+            updateDatesForSemester()
+        }
+        .onChange(of: selectedSemesterType) { _, _ in
+            updateDatesForSemester()
+        }
+        .onChange(of: selectedYear) { _, _ in
+            updateDatesForSemester()
         }
     }
     
     // MARK: - Helper Methods
+    
+    /// 期間を更新（常にデフォルト期間を使用）
+    private func updateDatesForSemester() {
+        startDate = getSemesterStartDate()
+        endDate = getSemesterEndDate()
+    }
     
     /// 学期の開始日を取得
     private func getSemesterStartDate() -> Date {
@@ -207,23 +192,6 @@ struct AddTimetableSheetView: View {
         return formatter.string(from: date)
     }
     
-    /// ペアになる学期を検索
-    private func findPairedSemester() -> Semester? {
-        let pairedSemesterType: SemesterType = selectedSemesterType == .firstHalf ? .secondHalf : .firstHalf
-        
-        return viewModel.availableSemesters.first { semester in
-            // 同じ年度で反対の学期
-            guard let semesterTypeName = semester.semesterType,
-                  let semesterType = SemesterType(rawValue: semesterTypeName),
-                  semesterType == pairedSemesterType else {
-                return false
-            }
-            
-            // 年度が一致するかチェック
-            let semesterYear = Calendar.current.component(.year, from: semester.startDate ?? Date())
-            return semesterYear == selectedYear
-        }
-    }
     
     /// 同じシートが既に存在するかチェック
     private func isDuplicateSheet() -> Bool {
@@ -256,8 +224,8 @@ struct AddTimetableSheetView: View {
         newSemester.semesterId = UUID()
         newSemester.name = sheetName.trimmingCharacters(in: .whitespacesAndNewlines)
         newSemester.semesterType = selectedSemesterType.rawValue
-        newSemester.startDate = getSemesterStartDate()
-        newSemester.endDate = getSemesterEndDate()
+        newSemester.startDate = startDate  // ユーザーが設定した期間を使用
+        newSemester.endDate = endDate      // ユーザーが設定した期間を使用
         newSemester.isActive = false // 作成時は非アクティブ
         newSemester.createdAt = Date()
         
@@ -265,8 +233,27 @@ struct AddTimetableSheetView: View {
         do {
             try context.save()
             
+            // 現在の学期IDを保存（新しい学期作成後も元の学期を維持するため）
+            let currentSemesterIdBeforeUpdate = viewModel.currentSemester?.semesterId
+            
             // 利用可能学期リストを更新
             viewModel.setupSemesters()
+            
+            // 元の学期をIDベースで安全に回復（現在表示中の学期を維持）
+            if let preservedSemesterId = currentSemesterIdBeforeUpdate {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                    let recoveryRequest: NSFetchRequest<Semester> = Semester.fetchRequest()
+                    recoveryRequest.predicate = NSPredicate(format: "semesterId == %@", preservedSemesterId as CVarArg)
+                    recoveryRequest.fetchLimit = 1
+                    
+                    if let recoveredSemester = try? viewModel.managedObjectContext.fetch(recoveryRequest).first {
+                        viewModel.currentSemester = recoveredSemester
+                        print("新しい学期作成後、元の学期(\(recoveredSemester.name ?? ""))をIDベースで安全に回復")
+                    } else {
+                        print("AddTimetableSheetView警告: 元の学期ID(\(preservedSemesterId))が見つかりませんでした")
+                    }
+                }
+            }
             
             // 通知を送信
             NotificationCenter.default.post(name: .courseDataDidChange, object: nil)

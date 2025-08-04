@@ -92,6 +92,18 @@ struct SettingsView: View {
         } message: {
             Text("すべてのデータ（授業、欠席記録、設定）が削除され、現在の期間に適した学期シートのみが作成されます。\n\nこの操作は取り消せません。")
         }
+        .onReceive(NotificationCenter.default.publisher(for: .semesterDataDidChange)) { _ in
+            // 学期データが変更された時にUIを更新
+            DispatchQueue.main.async {
+                viewModel.objectWillChange.send()
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .semesterPeriodDidChange)) { _ in
+            // 期間が変更された時にUIを更新
+            DispatchQueue.main.async {
+                viewModel.objectWillChange.send()
+            }
+        }
     }
 }
 
@@ -333,6 +345,7 @@ struct PasscodeSetupView: View {
                     .textFieldStyle(RoundedBorderTextFieldStyle())
                     .keyboardType(.numberPad)
                     .frame(maxWidth: 200)
+                    .disableAutocorrection(true)
                 
                 if step == .confirm && !passcode.isEmpty && !confirmPasscode.isEmpty && passcode != confirmPasscode {
                     Text("パスコードが一致しません")
@@ -433,6 +446,19 @@ struct TimetableSheetManagementView: View {
     @State private var sheetToEdit: Semester?
     @State private var sheetToDelete: Semester?
     @State private var showingCannotDeleteLastSheetAlert = false
+    @State private var activeSheetManagementSheet: SheetManagementSheetType? = nil
+    
+    enum SheetManagementSheetType: Identifiable {
+        case add
+        case edit(Semester)
+        
+        var id: String {
+            switch self {
+            case .add: return "add"
+            case .edit(let semester): return "edit-\(semester.objectID)"
+            }
+        }
+    }
     
     var body: some View {
         List {
@@ -449,7 +475,7 @@ struct TimetableSheetManagementView: View {
                         semester: semester,
                         onEdit: {
                             sheetToEdit = semester
-                            showingEditSheet = true
+                            activeSheetManagementSheet = .edit(semester)
                         },
                         onDelete: {
                             if viewModel.availableSemesters.count <= 1 {
@@ -468,15 +494,15 @@ struct TimetableSheetManagementView: View {
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
                 Button("追加") {
-                    showingAddSheet = true
+                    activeSheetManagementSheet = .add
                 }
             }
         }
-        .sheet(isPresented: $showingAddSheet) {
-            AddTimetableSheetView()
-        }
-        .sheet(isPresented: $showingEditSheet) {
-            if let semester = sheetToEdit {
+        .sheet(item: $activeSheetManagementSheet) { sheetType in
+            switch sheetType {
+            case .add:
+                AddTimetableSheetView()
+            case .edit(let semester):
                 EditTimetableSheetView(semester: semester)
             }
         }
@@ -515,7 +541,7 @@ struct TimetableSheetManagementView: View {
 
 // MARK: - 時間割シート行
 struct TimetableSheetRow: View {
-    let semester: Semester
+    @ObservedObject var semester: Semester  // ObservedObjectに変更
     let onEdit: () -> Void
     let onDelete: () -> Void
     @EnvironmentObject private var viewModel: AttendanceViewModel

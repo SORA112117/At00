@@ -30,6 +30,8 @@ struct EditTimetableSheetView: View {
                         
                         TextField("シート名を入力", text: $sheetName)
                             .textFieldStyle(RoundedBorderTextFieldStyle())
+                            .keyboardType(.default)
+                            .disableAutocorrection(true)
                     }
                     .padding(.vertical, 4)
                     
@@ -85,34 +87,6 @@ struct EditTimetableSheetView: View {
                     }
                 }
                 
-                // ペア関係の表示
-                if let pairedSemester = findPairedSemester() {
-                    Section("関連する時間割シート") {
-                        HStack {
-                            Image(systemName: "link")
-                                .foregroundColor(.blue)
-                            
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text("ペアシート")
-                                    .font(.headline)
-                                Text(pairedSemester.name ?? "")
-                                    .font(.subheadline)
-                                    .foregroundColor(.secondary)
-                            }
-                            
-                            Spacer()
-                            
-                            Text("ペア")
-                                .font(.caption)
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 4)
-                                .background(Color.blue.opacity(0.8))
-                                .foregroundColor(.white)
-                                .cornerRadius(8)
-                        }
-                        .padding(.vertical, 4)
-                    }
-                }
             }
             .navigationTitle("時間割シート編集")
             .navigationBarTitleDisplayMode(.inline)
@@ -175,29 +149,6 @@ struct EditTimetableSheetView: View {
         return (try? viewModel.managedObjectContext.count(for: request)) ?? 0
     }
     
-    /// ペアになる学期を検索
-    private func findPairedSemester() -> Semester? {
-        guard let semesterTypeString = semester.semesterType,
-              let semesterType = SemesterType(rawValue: semesterTypeString),
-              let startDate = semester.startDate else {
-            return nil
-        }
-        
-        let year = Calendar.current.component(.year, from: startDate)
-        let pairedSemesterType: SemesterType = semesterType == .firstHalf ? .secondHalf : .firstHalf
-        
-        return viewModel.availableSemesters.first { otherSemester in
-            guard let otherSemesterTypeString = otherSemester.semesterType,
-                  let otherSemesterType = SemesterType(rawValue: otherSemesterTypeString),
-                  otherSemesterType == pairedSemesterType,
-                  let otherStartDate = otherSemester.startDate else {
-                return false
-            }
-            
-            let otherYear = Calendar.current.component(.year, from: otherStartDate)
-            return otherYear == year
-        }
-    }
     
     /// 変更を保存
     private func saveChanges() {
@@ -226,19 +177,20 @@ struct EditTimetableSheetView: View {
         if showingDatePickers {
             semester.startDate = startDate
             semester.endDate = endDate
-            
-            // ペアシートの期間も更新
-            if let pairedSemester = findPairedSemester() {
-                updatePairedSemesterDates(pairedSemester)
-            }
         }
         
         // 保存
         do {
             try viewModel.managedObjectContext.save()
             
-            // 通知を送信
+            // 通知を送信（期間が変更された場合は専用通知も送信）
             NotificationCenter.default.post(name: .courseDataDidChange, object: nil)
+            NotificationCenter.default.post(name: .semesterDataDidChange, object: nil)
+            
+            if showingDatePickers {
+                // 期間が変更された場合の専用通知
+                NotificationCenter.default.post(name: .semesterPeriodDidChange, object: semester)
+            }
             
             dismiss()
         } catch {
@@ -247,33 +199,6 @@ struct EditTimetableSheetView: View {
         }
     }
     
-    /// ペアシートの期間を更新
-    private func updatePairedSemesterDates(_ pairedSemester: Semester) {
-        guard let semesterTypeString = semester.semesterType,
-              let semesterType = SemesterType(rawValue: semesterTypeString) else {
-            return
-        }
-        
-        if semesterType == .firstHalf {
-            // 前期シートを編集した場合、後期シートの期間を前期に基づいて調整
-            pairedSemester.startDate = Calendar.current.date(byAdding: .day, value: 1, to: endDate)
-            
-            // 後期の期間を前期の期間の長さに基づいて設定
-            let firstHalfDuration = Calendar.current.dateComponents([.day], from: startDate, to: endDate).day ?? 0
-            if let pairStart = pairedSemester.startDate {
-                pairedSemester.endDate = Calendar.current.date(byAdding: .day, value: firstHalfDuration, to: pairStart)
-            }
-        } else {
-            // 後期シートを編集した場合、前期シートの期間を後期に基づいて調整
-            pairedSemester.endDate = Calendar.current.date(byAdding: .day, value: -1, to: startDate)
-            
-            // 前期の期間を後期の期間の長さに基づいて設定
-            let secondHalfDuration = Calendar.current.dateComponents([.day], from: startDate, to: endDate).day ?? 0
-            if let pairEnd = pairedSemester.endDate {
-                pairedSemester.startDate = Calendar.current.date(byAdding: .day, value: -secondHalfDuration, to: pairEnd)
-            }
-        }
-    }
 }
 
 #Preview {

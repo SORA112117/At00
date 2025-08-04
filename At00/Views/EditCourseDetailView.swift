@@ -141,9 +141,8 @@ struct EditCourseDetailView: View {
                     .autocorrectionDisabled()
                     .textInputAutocapitalization(.words)
                     .submitLabel(.done)
-                    .onTapGesture {
-                        // TextFieldを確実にアクティブにする
-                    }
+                    .keyboardType(.default)
+                    .disableAutocorrection(true)
                 
                 Text("\(dayName)曜日 \(course.period)限")
                     .font(.subheadline)

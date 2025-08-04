@@ -365,9 +365,8 @@ struct NewCourseCreationView: View {
                         .autocorrectionDisabled()
                         .textInputAutocapitalization(.words)
                         .submitLabel(.done)
-                        .onTapGesture {
-                            // TextFieldを確実にアクティブにする
-                        }
+                        .keyboardType(.default)
+                        .disableAutocorrection(true)
                 }
                 .padding()
                 .background(

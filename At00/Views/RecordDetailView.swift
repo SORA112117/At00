@@ -68,9 +68,25 @@ struct RecordDetailView: View {
                     Text("メモ（任意）")
                         .font(.headline)
                     
-                    TextField("メモを入力してください", text: $memo, axis: .vertical)
-                        .textFieldStyle(RoundedBorderTextFieldStyle())
-                        .lineLimit(3...6)
+                    ZStack(alignment: .topLeading) {
+                        RoundedRectangle(cornerRadius: 8)
+                            .stroke(Color(.systemGray4), lineWidth: 1)
+                            .frame(minHeight: 80)
+                        
+                        if memo.isEmpty {
+                            Text("メモを入力してください")
+                                .foregroundColor(.secondary)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 12)
+                        }
+                        
+                        TextEditor(text: $memo)
+                            .padding(.horizontal, 4)
+                            .padding(.vertical, 8)
+                            .background(Color.clear)
+                            .frame(minHeight: 80)
+                            .scrollContentBackground(.hidden)
+                    }
                 }
                 
                 Spacer()
