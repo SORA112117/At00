@@ -607,33 +607,44 @@ struct EnhancedCourseCell: View {
     private func createColorBoxGrid(course: Course, absenceCount: Int, cellWidth: CGFloat) -> some View {
         let maxAbsences = Int(course.maxAbsences)
         let boxSize: CGFloat = max(4, (cellWidth - 16) / 8) // 統一サイズ
-        let displayCount = min(5, maxAbsences) // 表示する最大数
+        let displayCount = maxAbsences <= 5 ? maxAbsences : 5 // 5回以下なら最大欠席可能回数、それ以上なら5固定
         
         return HStack(spacing: 1) {
+            // 中央揃えのためのSpacer（5回以下の場合）
+            if maxAbsences <= 5 && maxAbsences < 5 {
+                Spacer()
+            }
+            
             ForEach(0..<displayCount, id: \.self) { index in
                 Rectangle()
-                    .fill(getColorBoxColor(course: course, index: index, absenceCount: absenceCount))
+                    .fill(getColorBoxColor(course: course, index: index, absenceCount: absenceCount, maxAbsences: maxAbsences))
                     .frame(width: boxSize, height: boxSize)
+            }
+            
+            // 中央揃えのためのSpacer（5回以下の場合）
+            if maxAbsences <= 5 && maxAbsences < 5 {
+                Spacer()
             }
         }
     }
     
-    /// カラーボックスの色を計算（最適化版）
-    private func getColorBoxColor(course: Course, index: Int, absenceCount: Int) -> Color {
+    /// カラーボックスの色を計算（最大欠席可能回数から逆算）
+    private func getColorBoxColor(course: Course, index: Int, absenceCount: Int, maxAbsences: Int) -> Color {
         guard index < absenceCount else {
-            return Color(.systemGray4) // 未欠席
+            return Color(.systemGray4) // 未欠席（グレー）
         }
         
-        let maxAbsences = Int(course.maxAbsences)
+        // 現在のボックス位置（index + 1）が最大欠席可能回数に対してどの段階かで色分け
+        let currentPosition = index + 1
+        let remainingAfterThis = maxAbsences - currentPosition
         
-        // 欠席状況に応じた色を効率的に決定
-        switch absenceCount {
-        case maxAbsences...:
-            return .red // 限界到達
-        case (maxAbsences - 1):
-            return .orange // 危険圏
+        switch remainingAfterThis {
+        case 0:
+            return .red // 限界到達（最後の欠席）
+        case 1:
+            return .orange // 危険圏（あと1回で限界）
         default:
-            return .green.opacity(0.7) // 安全圏
+            return .green.opacity(0.7) // 安全圏（まだ余裕あり）
         }
     }
     
