@@ -12,12 +12,22 @@ import SwiftUI
 struct At00App: App {
     let persistenceController = PersistenceController.shared
     @StateObject private var attendanceViewModel = AttendanceViewModel()
+    @State private var showingOnboarding = !UserDefaults.standard.bool(forKey: "hasCompletedOnboarding")
     
     var body: some Scene {
         WindowGroup {
-            MainTabView()
-                .environment(\.managedObjectContext, persistenceController.container.viewContext)
-                .environmentObject(attendanceViewModel)
+            ZStack {
+                MainTabView()
+                    .environment(\.managedObjectContext, persistenceController.container.viewContext)
+                    .environmentObject(attendanceViewModel)
+                
+                if showingOnboarding {
+                    OnboardingView(isPresented: $showingOnboarding)
+                        .transition(.opacity)
+                        .zIndex(1)
+                }
+            }
+            .animation(.easeInOut(duration: 0.5), value: showingOnboarding)
         }
     }
 }

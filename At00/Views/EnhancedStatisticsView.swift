@@ -13,6 +13,7 @@ struct EnhancedStatisticsView: View {
     @State private var selectedTimeFrame: TimeFrame = .monthly
     @State private var selectedPeriod = Date()
     @State private var refreshTrigger = UUID() // リアルタイム更新用
+    @State private var showingHelp = false
     
     enum TimeFrame: String, CaseIterable {
         case monthly = "月"
@@ -353,20 +354,10 @@ struct EnhancedStatisticsView: View {
     
     // 空状態表示
     private var emptyStateView: some View {
-        VStack(spacing: 16) {
-            Image(systemName: "chart.bar.xaxis")
-                .font(.system(size: 60))
-                .foregroundColor(.gray.opacity(0.5))
-            
-            Text("データがありません")
-                .font(.headline)
-                .foregroundColor(.secondary)
-            
-            Text("授業を登録して出席を記録してください")
-                .font(.subheadline)
-                .foregroundColor(.secondary)
+        StatisticsEmptyStateView {
+            // 時間割タブに移動
+            viewModel.selectedTab = 0
         }
-        .padding(40)
     }
     
     // MARK: - Helper Methods

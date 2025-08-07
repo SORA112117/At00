@@ -24,6 +24,8 @@ struct EditCourseDetailView: View {
     @State private var showingAddAbsenceAlert = false
     @State private var showingDuplicateNameAlert = false
     @State private var duplicateAlertMessage = ""
+    @State private var showingOutsidePeriodAlert = false
+    @State private var outsidePeriodMessage = ""
     
     // 一時的な欠席記録の構造体
     struct TempAbsenceRecord: Identifiable {
@@ -80,9 +82,12 @@ struct EditCourseDetailView: View {
         .sheet(isPresented: $showingAddAbsenceAlert) {
             AddAbsenceRecordSheet(
                 selectedDate: $selectedAbsenceDate,
+                currentSemester: viewModel.currentSemester,
                 onAdd: {
                     addAbsenceRecord()
-                    showingAddAbsenceAlert = false
+                    if !showingOutsidePeriodAlert {
+                        showingAddAbsenceAlert = false
+                    }
                 },
                 onCancel: {
                     showingAddAbsenceAlert = false
@@ -127,6 +132,11 @@ struct EditCourseDetailView: View {
             Button("OK") { }
         } message: {
             Text(duplicateAlertMessage)
+        }
+        .alert("学期期間外エラー", isPresented: $showingOutsidePeriodAlert) {
+            Button("OK") { }
+        } message: {
+            Text(outsidePeriodMessage)
         }
     }
     
@@ -262,17 +272,8 @@ struct EditCourseDetailView: View {
             }
             
             if displayedRecords.isEmpty {
-                VStack(spacing: 6) {
-                    Image(systemName: "checkmark.circle")
-                        .font(.title3)
-                        .foregroundColor(.green)
-                    
-                    Text("欠席記録はありません")
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
-                }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 16)
+                AbsenceRecordsEmptyStateView()
+                    .padding(.vertical, 20)
             } else {
                 LazyVStack(spacing: 6) {
                     // 既存の記録（削除予定でないもの）
@@ -503,6 +504,32 @@ struct EditCourseDetailView: View {
     }
     
     private func addAbsenceRecord() {
+        // 期間外日付チェック
+        if !viewModel.isDateWithinCurrentSemesterPeriod(selectedAbsenceDate) {
+            let formatter = DateFormatter()
+            formatter.dateFormat = "yyyy年MM月dd日"
+            let selectedDateString = formatter.string(from: selectedAbsenceDate)
+            
+            if let semesterName = viewModel.currentSemester?.name,
+               let startDate = viewModel.currentSemester?.startDate,
+               let endDate = viewModel.currentSemester?.endDate {
+                let startDateString = formatter.string(from: startDate)
+                let endDateString = formatter.string(from: endDate)
+                
+                outsidePeriodMessage = "選択された日付（\(selectedDateString)）は、現在の学期「\(semesterName)」の期間外です。\n\n有効期間: \(startDateString) 〜 \(endDateString)\n\n学期期間内の日付を選択してください。"
+            } else {
+                outsidePeriodMessage = "選択された日付（\(selectedDateString)）は学期期間外です。学期期間内の日付を選択してください。"
+            }
+            
+            showingOutsidePeriodAlert = true
+            
+            // エラーハプティックフィードバック
+            let notificationFeedback = UINotificationFeedbackGenerator()
+            notificationFeedback.notificationOccurred(.error)
+            
+            return
+        }
+        
         // 一時的な記録として追加（まだ保存しない）
         let tempRecord = TempAbsenceRecord(
             date: selectedAbsenceDate,
@@ -514,7 +541,7 @@ struct EditCourseDetailView: View {
             tempAddedRecords.append(tempRecord)
         }
         
-        // ハプティックフィードバック
+        // 成功ハプティックフィードバック
         let impactFeedback = UIImpactFeedbackGenerator(style: .medium)
         impactFeedback.impactOccurred()
         
@@ -634,8 +661,39 @@ struct EditCourseDetailView: View {
 
 struct AddAbsenceRecordSheet: View {
     @Binding var selectedDate: Date
+    let currentSemester: Semester?
     let onAdd: () -> Void
     let onCancel: () -> Void
+    
+    private var isDateValid: Bool {
+        guard let semester = currentSemester,
+              let startDate = semester.startDate,
+              let endDate = semester.endDate else {
+            return false
+        }
+        
+        let calendar = Calendar.current
+        let checkDate = calendar.startOfDay(for: selectedDate)
+        let semesterStart = calendar.startOfDay(for: startDate)
+        let semesterEnd = calendar.startOfDay(for: endDate)
+        
+        return checkDate >= semesterStart && checkDate <= semesterEnd
+    }
+    
+    private var dateRangeText: String {
+        guard let semester = currentSemester,
+              let startDate = semester.startDate,
+              let endDate = semester.endDate else {
+            return "学期情報が取得できません"
+        }
+        
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy年MM月dd日"
+        let start = formatter.string(from: startDate)
+        let end = formatter.string(from: endDate)
+        
+        return "学期期間: \(start) 〜 \(end)"
+    }
     
     var body: some View {
         NavigationView {
@@ -650,6 +708,33 @@ struct AddAbsenceRecordSheet: View {
                         .foregroundColor(.secondary)
                 }
                 
+                // 学期期間情報
+                VStack(spacing: 8) {
+                    if let semesterName = currentSemester?.name {
+                        Text("現在の学期: \(semesterName)")
+                            .font(.caption)
+                            .fontWeight(.medium)
+                            .foregroundColor(.blue)
+                    }
+                    
+                    Text(dateRangeText)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    
+                    if !isDateValid {
+                        HStack(spacing: 4) {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                            Text("選択された日付は学期期間外です")
+                        }
+                        .font(.caption)
+                        .foregroundColor(.red)
+                        .padding(.top, 4)
+                    }
+                }
+                .padding()
+                .background(Color(.tertiarySystemBackground))
+                .cornerRadius(8)
+                
                 DatePicker(
                     "欠席日",
                     selection: $selectedDate,
@@ -657,8 +742,12 @@ struct AddAbsenceRecordSheet: View {
                 )
                 .datePickerStyle(GraphicalDatePickerStyle())
                 .padding()
-                .background(Color(.secondarySystemBackground))
+                .background(isDateValid ? Color(.secondarySystemBackground) : Color(.systemRed).opacity(0.1))
                 .cornerRadius(12)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12)
+                        .stroke(isDateValid ? Color.clear : Color.red, lineWidth: 1)
+                )
                 
                 Spacer()
                 
@@ -680,8 +769,9 @@ struct AddAbsenceRecordSheet: View {
                     .foregroundColor(.white)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 12)
-                    .background(Color.blue)
+                    .background(isDateValid ? Color.blue : Color.gray)
                     .cornerRadius(10)
+                    .disabled(!isDateValid)
                 }
             }
             .padding()

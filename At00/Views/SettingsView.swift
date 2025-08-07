@@ -8,7 +8,6 @@
 import SwiftUI
 import CoreData
 import UserNotifications
-import LocalAuthentication
 
 struct SettingsView: View {
     @EnvironmentObject private var viewModel: AttendanceViewModel
@@ -16,6 +15,7 @@ struct SettingsView: View {
     @State private var selectedSemesterForReset: Semester?
     @Binding var shouldNavigateToSheetManagement: Bool
     @State private var navigationPath = NavigationPath()
+    @State private var showingHelp = false
     
     var body: some View {
         NavigationStack(path: $navigationPath) {
@@ -27,14 +27,10 @@ struct SettingsView: View {
                     }
                 }
                 
-                // 外観・セキュリティセクション
-                Section("外観・セキュリティ") {
+                // 外観セクション
+                Section("外観") {
                     NavigationLink("外観設定") {
                         AppearanceSettingsView()
-                    }
-                    
-                    NavigationLink("セキュリティ設定") {
-                        SecuritySettingsView()
                     }
                 }
                 
@@ -52,6 +48,22 @@ struct SettingsView: View {
                         showingResetConfirmation = true
                     }
                     .foregroundColor(.red)
+                }
+                
+                // サポートセクション  
+                Section("サポート") {
+                    Button(action: {
+                        showingHelp = true
+                    }) {
+                        HStack {
+                            Text("使い方・ヘルプ")
+                                .foregroundColor(.primary)
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                    }
                 }
                 
                 // アプリ情報セクション
@@ -103,6 +115,9 @@ struct SettingsView: View {
             DispatchQueue.main.async {
                 viewModel.objectWillChange.send()
             }
+        }
+        .sheet(isPresented: $showingHelp) {
+            HelpView()
         }
     }
 }
@@ -264,178 +279,7 @@ struct AppearanceSettingsView: View {
     }
 }
 
-struct SecuritySettingsView: View {
-    @AppStorage("passcodeEnabled") private var passcodeEnabled = false
-    @AppStorage("biometricEnabled") private var biometricEnabled = false
-    @State private var showingPasscodeSetup = false
-    @State private var biometricType: String = ""
-    
-    var body: some View {
-        List {
-            Section("セキュリティ設定") {
-                Toggle("パスコードロック", isOn: $passcodeEnabled)
-                    .onChange(of: passcodeEnabled) { _, newValue in
-                        if newValue {
-                            showingPasscodeSetup = true
-                        }
-                    }
-                
-                if passcodeEnabled {
-                    Toggle("\(biometricType)認証", isOn: $biometricEnabled)
-                        .disabled(biometricType.isEmpty)
-                }
-                
-                if passcodeEnabled || biometricEnabled {
-                    Text("アプリを開く際に認証が必要になります。セキュリティを向上させるために設定をお勧めします。")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-            }
-        }
-        .navigationTitle("セキュリティ設定")
-        .sheet(isPresented: $showingPasscodeSetup) {
-            PasscodeSetupView(isPresented: $showingPasscodeSetup)
-        }
-        .onAppear {
-            checkBiometricAvailability()
-        }
-    }
-    
-    private func checkBiometricAvailability() {
-        let context = LAContext()
-        var error: NSError?
-        
-        if context.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: &error) {
-            switch context.biometryType {
-            case .faceID:
-                biometricType = "Face ID"
-            case .touchID:
-                biometricType = "Touch ID"
-            default:
-                biometricType = "生体"
-            }
-        } else {
-            biometricType = ""
-        }
-    }
-}
 
-struct PasscodeSetupView: View {
-    @Binding var isPresented: Bool
-    @State private var passcode = ""
-    @State private var confirmPasscode = ""
-    @State private var step: SetupStep = .initial
-    @State private var showingError = false
-    @State private var errorMessage = ""
-    
-    enum SetupStep {
-        case initial, confirm, complete
-    }
-    
-    var body: some View {
-        NavigationView {
-            VStack(spacing: 20) {
-                Text(stepTitle)
-                    .font(.title2)
-                    .fontWeight(.medium)
-                    .multilineTextAlignment(.center)
-                    .padding()
-                
-                SecureField("パスコードを入力", text: currentBinding)
-                    .textFieldStyle(RoundedBorderTextFieldStyle())
-                    .keyboardType(.numberPad)
-                    .frame(maxWidth: 200)
-                    .disableAutocorrection(true)
-                
-                if step == .confirm && !passcode.isEmpty && !confirmPasscode.isEmpty && passcode != confirmPasscode {
-                    Text("パスコードが一致しません")
-                        .foregroundColor(.red)
-                        .font(.caption)
-                }
-                
-                Spacer()
-            }
-            .padding()
-            .navigationTitle("パスコード設定")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button("キャンセル") {
-                        isPresented = false
-                    }
-                }
-                
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("次へ") {
-                        handleNextStep()
-                    }
-                    .disabled(!canProceed)
-                }
-            }
-        }
-        .alert("エラー", isPresented: $showingError) {
-            Button("OK") {}
-        } message: {
-            Text(errorMessage)
-        }
-    }
-    
-    private var stepTitle: String {
-        switch step {
-        case .initial:
-            return "4桁のパスコードを設定してください"
-        case .confirm:
-            return "パスコードを再入力してください"
-        case .complete:
-            return "パスコードが設定されました"
-        }
-    }
-    
-    private var currentBinding: Binding<String> {
-        switch step {
-        case .initial, .complete:
-            return $passcode
-        case .confirm:
-            return $confirmPasscode
-        }
-    }
-    
-    private var canProceed: Bool {
-        switch step {
-        case .initial:
-            return passcode.count == 4
-        case .confirm:
-            return confirmPasscode.count == 4 && passcode == confirmPasscode
-        case .complete:
-            return true
-        }
-    }
-    
-    private func handleNextStep() {
-        switch step {
-        case .initial:
-            step = .confirm
-        case .confirm:
-            if passcode == confirmPasscode {
-                savePasscode()
-                step = .complete
-                DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
-                    isPresented = false
-                }
-            } else {
-                errorMessage = "パスコードが一致しません"
-                showingError = true
-            }
-        case .complete:
-            isPresented = false
-        }
-    }
-    
-    private func savePasscode() {
-        // 実際の実装では、パスコードをキーチェーンに安全に保存する必要があります
-        UserDefaults.standard.set(passcode, forKey: "userPasscode")
-    }
-}
 
 // MARK: - 時間割シート管理ビュー
 struct TimetableSheetManagementView: View {
@@ -463,7 +307,7 @@ struct TimetableSheetManagementView: View {
     var body: some View {
         List {
             Section {
-                Text("時間割シートを追加・削除できます。前期と後期がペアになった時間割シートは、通年科目が自動的に同期されます。")
+                Text("時間割シートを追加・編集・削除できます。")
                     .font(.subheadline)
                     .foregroundColor(.secondary)
                     .padding(.vertical, 8)
