@@ -49,13 +49,13 @@ class NotificationManager: ObservableObject {
         content.title = "⚠️ 欠席回数アラート"
         
         if remainingAbsences <= 0 {
-            content.body = "【\(courseName)】単位取得が危険です！欠席回数が上限に達しました。"
+            content.body = "【\(courseName)】欠席上限に達しました。履修状況をご確認ください。"
             content.sound = .default
         } else if remainingAbsences <= 1 {
-            content.body = "【\(courseName)】欠席回数があと\(remainingAbsences)回で上限です。注意してください。"
+            content.body = "【\(courseName)】欠席上限まで残り\(remainingAbsences)回です。"
             content.sound = .default
         } else if remainingAbsences <= 2 {
-            content.body = "【\(courseName)】欠席回数があと\(remainingAbsences)回で上限です。"
+            content.body = "【\(courseName)】欠席上限まで残り\(remainingAbsences)回です。"
             content.sound = .default
         }
         
@@ -102,7 +102,7 @@ class NotificationManager: ObservableObject {
         
         let content = UNMutableNotificationContent()
         content.title = "📝 出席記録のリマインダー"
-        content.body = "今日の授業の出席状況を記録しましたか？"
+        content.body = "出席記録をしましょう！"
         content.sound = .default
         content.categoryIdentifier = "REMINDER"
         content.userInfo = ["type": "reminder"]

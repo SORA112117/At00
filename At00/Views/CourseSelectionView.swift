@@ -482,7 +482,7 @@ struct NewCourseCreationView: View {
                 )
                 
                 // ヒント
-                Text("※ 欠席可能回数は総授業回数の1/3が目安です")
+                Text("※ 一般的に欠席可能回数は総授業回数の1/3程度が目安とされています")
                     .font(.caption)
                     .foregroundColor(.secondary)
                     .padding(.horizontal)

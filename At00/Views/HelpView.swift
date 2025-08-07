@@ -24,8 +24,8 @@ struct HelpView: View {
             icon: "minus.circle.fill",
             title: "欠席記録",
             items: [
-                HelpItem(title: "ワンタップ記録", description: "授業をタップするだけで欠席を記録できます"),
-                HelpItem(title: "詳細記録", description: "授業を長押しして詳細画面から遅刻・早退・公欠も記録可能"),
+                HelpItem(title: "ワンタップ記録", description: "授業セルをタップすることで欠席記録が追加されます"),
+                HelpItem(title: "詳細記録", description: "授業セルを長押しして詳細画面から遅刻・早退・公欠も記録可能"),
                 HelpItem(title: "記録の修正", description: "授業詳細画面から過去の記録を編集・削除できます")
             ]
         ),
@@ -33,7 +33,7 @@ struct HelpView: View {
             icon: "paintpalette.fill",
             title: "出席状況の色分け",
             items: [
-                HelpItem(title: "緑色", description: "出席状況良好（欠席回数が少ない）"),
+                HelpItem(title: "緑色", description: "良好な出席状況"),
                 HelpItem(title: "オレンジ色", description: "注意が必要（欠席回数が増加）"),
                 HelpItem(title: "赤色", description: "危険（上限に近い・超過）")
             ]

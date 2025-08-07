@@ -52,5 +52,5 @@ struct AlertMessage {
     static let deleteConfirmation = "本当に削除しますか？"
     static let deleteWarning = "この操作は取り消せません"
     static let duplicateRecord = "既に記録されています"
-    static let dailyLimitReached = "1日の記録上限に到達しました"
+    static let dailyLimitReached = "1日の記録上限に達しました"
 }

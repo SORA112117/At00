@@ -417,17 +417,17 @@ struct TimetableAlertsModifier: ViewModifier {
             } message: {
                 Text(viewModel.errorMessage ?? "")
             }
-            .alert("記録済み", isPresented: $showingDuplicateAlert) {
+            .alert("既に記録済み", isPresented: $showingDuplicateAlert) {
                 Button("OK") { }
             } message: {
                 Text("\(duplicateCourseName)の今日の欠席は既に記録されています")
             }
-            .alert("1日の記録上限に到達", isPresented: $showingDailyLimitAlert) {
+            .alert("1日の記録上限に達しました", isPresented: $showingDailyLimitAlert) {
                 Button("OK") { }
             } message: {
-                Text("\(dailyLimitCourseName)は今日すべてのコマで欠席記録済みです")
+                Text("\(dailyLimitCourseName)は今日すべての時限で欠席が記録済みです")
             }
-            .alert("学期期間外です", isPresented: $showingOutsidePeriodAlert) {
+            .alert("学期期間外のため記録できません", isPresented: $showingOutsidePeriodAlert) {
                 Button("OK") { }
             } message: {
                 Text("今日の日付は\(outsidePeriodCourseName)の学期期間外です。\n欠席記録は学期期間内のみ可能です。")
