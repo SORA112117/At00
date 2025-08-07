@@ -22,6 +22,8 @@ struct EditCourseDetailView: View {
     @State private var deletedRecords: Set<AttendanceRecord> = [] // 削除予定の記録
     @State private var selectedAbsenceDate: Date = Date()
     @State private var showingAddAbsenceAlert = false
+    @State private var showingDuplicateNameAlert = false
+    @State private var duplicateAlertMessage = ""
     
     // 一時的な欠席記録の構造体
     struct TempAbsenceRecord: Identifiable {
@@ -120,6 +122,11 @@ struct EditCourseDetailView: View {
                     loadAbsenceRecords()
                 }
             }
+        }
+        .alert("授業名の重複エラー", isPresented: $showingDuplicateNameAlert) {
+            Button("OK") { }
+        } message: {
+            Text(duplicateAlertMessage)
         }
     }
     
@@ -516,6 +523,46 @@ struct EditCourseDetailView: View {
     }
     
     private func saveChanges() {
+        // 授業名が変更された場合、重複チェック
+        if courseName != course.courseName {
+            // 全学期を通じて同名の授業が既に存在するかチェック（自分自身を除く）
+            let request: NSFetchRequest<Course> = Course.fetchRequest()
+            request.predicate = NSPredicate(
+                format: "courseName == %@ AND courseId != %@",
+                courseName,
+                course.courseId! as CVarArg
+            )
+            request.fetchLimit = 1
+            
+            do {
+                let count = try viewModel.managedObjectContext.count(for: request)
+                if count > 0 {
+                    // どのシートに存在するか確認
+                    if let semester = viewModel.currentSemester {
+                        let currentSemesterRequest: NSFetchRequest<Course> = Course.fetchRequest()
+                        currentSemesterRequest.predicate = NSPredicate(
+                            format: "semester == %@ AND courseName == %@ AND courseId != %@",
+                            semester,
+                            courseName,
+                            course.courseId! as CVarArg
+                        )
+                        currentSemesterRequest.fetchLimit = 1
+                        
+                        let currentSemesterCount = try viewModel.managedObjectContext.count(for: currentSemesterRequest)
+                        if currentSemesterCount > 0 {
+                            duplicateAlertMessage = "「\(courseName)」という名前の授業は、この時間割シートに既に存在します。\n\n異なる授業名を使用してください。"
+                        } else {
+                            duplicateAlertMessage = "「\(courseName)」という名前の授業は、別の時間割シートに既に存在します。\n\n同じ授業名を複数のシートで使用することはできません。異なる授業名を使用してください。"
+                        }
+                    }
+                    showingDuplicateNameAlert = true
+                    return
+                }
+            } catch {
+                print("授業名重複チェックエラー: \(error)")
+            }
+        }
+        
         // 1. 削除予定の記録を実際に削除
         for record in deletedRecords {
             viewModel.managedObjectContext.delete(record)

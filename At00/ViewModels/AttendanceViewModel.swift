@@ -483,12 +483,42 @@ class AttendanceViewModel: ObservableObject {
         }
     }
     
-    // 同名科目が既に存在するかチェック
+    // 同名科目が既に存在するかチェック（現在の学期内のみ）
     func hasCourseWithSameName(_ courseName: String) -> Bool {
         guard let semester = currentSemester else { return false }
         
         let request: NSFetchRequest<Course> = Course.fetchRequest()
         request.predicate = NSPredicate(format: "courseName == %@ AND semester == %@", courseName, semester)
+        request.fetchLimit = 1
+        
+        do {
+            let count = try context.count(for: request)
+            return count > 0
+        } catch {
+            return false
+        }
+    }
+    
+    // 全学期を通じて同名科目が存在するかチェック
+    func hasCourseWithSameNameAcrossAllSemesters(_ courseName: String) -> Bool {
+        let request: NSFetchRequest<Course> = Course.fetchRequest()
+        request.predicate = NSPredicate(format: "courseName == %@", courseName)
+        request.fetchLimit = 1
+        
+        do {
+            let count = try context.count(for: request)
+            return count > 0
+        } catch {
+            return false
+        }
+    }
+    
+    // 他の学期に同名科目が存在するかチェック（現在の学期を除く）
+    func hasCourseWithSameNameInOtherSemesters(_ courseName: String) -> Bool {
+        guard let semester = currentSemester else { return false }
+        
+        let request: NSFetchRequest<Course> = Course.fetchRequest()
+        request.predicate = NSPredicate(format: "courseName == %@ AND semester != %@", courseName, semester)
         request.fetchLimit = 1
         
         do {
@@ -602,10 +632,52 @@ class AttendanceViewModel: ObservableObject {
     }
     
     
+    // 既存授業配置結果
+    enum AssignExistingCourseResult {
+        case success
+        case slotOccupied
+        case duplicateNameInSemester
+        case duplicateNameAcrossSemesters
+    }
+    
     // 既存授業を新しい時間割位置に配置
-    func assignExistingCourse(course: Course, newDayOfWeek: Int, newPeriod: Int) {
-        guard let semester = currentSemester else { return }
+    func assignExistingCourse(course: Course, newDayOfWeek: Int, newPeriod: Int) -> AssignExistingCourseResult {
+        guard let semester = currentSemester,
+              let courseName = course.courseName else { return .slotOccupied }
         
+        // 現在の位置に既に授業があるかチェック
+        if hasCourseBySemesterAndPosition(semester: semester, dayOfWeek: newDayOfWeek, period: newPeriod) {
+            return .slotOccupied
+        }
+        
+        // 全学期を通じて同名科目が存在するかチェック（ただし、配置元の授業は除く）
+        if hasCourseWithSameNameAcrossAllSemesters(courseName) {
+            // 現在の学期に既に存在するかチェック
+            let currentSemesterRequest: NSFetchRequest<Course> = Course.fetchRequest()
+            currentSemesterRequest.predicate = NSPredicate(
+                format: "semester == %@ AND courseName == %@ AND courseId != %@",
+                semester,
+                courseName,
+                course.courseId! as CVarArg
+            )
+            currentSemesterRequest.fetchLimit = 1
+            
+            do {
+                let count = try context.count(for: currentSemesterRequest)
+                if count > 0 {
+                    // 同じ学期内の異なる時間割に同名授業が既に存在
+                    return .duplicateNameInSemester
+                }
+            } catch {
+                print("同名授業チェックエラー: \(error)")
+                return .slotOccupied
+            }
+            
+            // 他の学期に存在する場合
+            if course.semester != semester {
+                return .duplicateNameAcrossSemesters
+            }
+        }
         
         // 既存の授業の複製を作成
         let newCourse = Course(context: context)
@@ -629,6 +701,8 @@ class AttendanceViewModel: ObservableObject {
         // 統一通知システムを使用
         scheduleNotification(.courseData)
         scheduleNotification(.statisticsData)
+        
+        return .success
     }
     
     

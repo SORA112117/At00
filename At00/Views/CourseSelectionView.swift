@@ -149,6 +149,16 @@ struct CourseSelectionView: View {
             }
             .background(Color(.systemGroupedBackground)) // 背景色を明示的に設定
             .animation(hasAppeared ? .easeInOut(duration: 0.3) : nil, value: selectedTab)
+            .alert("授業の登録エラー", isPresented: $showingDuplicateAlert) {
+                Button("OK") { }
+            } message: {
+                Text(duplicateAlertMessage)
+            }
+            .alert("授業名の重複エラー", isPresented: $showingNewCourseDuplicateAlert) {
+                Button("OK") { }
+            } message: {
+                Text(newCourseDuplicateMessage)
+            }
         }
     
     private func loadAvailableExistingCourses() {
@@ -179,10 +189,19 @@ struct CourseSelectionView: View {
         }
     }
     
+    @State private var showingNewCourseDuplicateAlert = false
+    @State private var newCourseDuplicateMessage = ""
+    
     private func saveNewCourse() {
-        // 同名の授業が既に存在しないかチェック
-        guard !courseNameExists(newCourseName) else {
-            // 同名の授業が存在する場合はアラートを表示するなどの処理を追加可能
+        // 全学期を通じた同名科目のチェック
+        if viewModel.hasCourseWithSameNameAcrossAllSemesters(newCourseName) {
+            // 現在の学期にあるか、他の学期にあるかで異なるメッセージを表示
+            if viewModel.hasCourseWithSameName(newCourseName) {
+                newCourseDuplicateMessage = "「\(newCourseName)」という名前の授業は、この時間割シートに既に登録されています。\n\n異なる授業名を使用してください。"
+            } else {
+                newCourseDuplicateMessage = "「\(newCourseName)」という名前の授業は、別の時間割シートに既に登録されています。\n\n同じ授業名を複数のシートで使用することはできません。異なる授業名を使用してください。"
+            }
+            showingNewCourseDuplicateAlert = true
             return
         }
         
@@ -209,19 +228,33 @@ struct CourseSelectionView: View {
         }
     }
     
+    @State private var showingDuplicateAlert = false
+    @State private var duplicateAlertMessage = ""
+    
     private func saveExistingCourse(_ course: Course) {
         // 既存の授業を新しい時間割に配置（複製）
-        viewModel.assignExistingCourse(
+        let result = viewModel.assignExistingCourse(
             course: course,
             newDayOfWeek: dayOfWeek,
             newPeriod: period
         )
         
-        // 即座に時間割を再読み込み
-        viewModel.loadTimetable()
-        
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-            dismiss()
+        switch result {
+        case .success:
+            // 即座に時間割を再読み込み
+            viewModel.loadTimetable()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                dismiss()
+            }
+        case .slotOccupied:
+            duplicateAlertMessage = "この時間帯には既に授業が登録されています。"
+            showingDuplicateAlert = true
+        case .duplicateNameInSemester:
+            duplicateAlertMessage = "「\(course.courseName ?? "")」という名前の授業は、この時間割シートの別の時限に既に登録されています。\n\n同じ授業を複数の時限に登録することはできません。"
+            showingDuplicateAlert = true
+        case .duplicateNameAcrossSemesters:
+            duplicateAlertMessage = "「\(course.courseName ?? "")」という名前の授業は、別の時間割シートに既に登録されています。\n\n同じ授業名を複数のシートで使用することはできません。"
+            showingDuplicateAlert = true
         }
     }
     
