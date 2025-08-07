@@ -69,6 +69,8 @@ class AttendanceViewModel: ObservableObject {
     
     // 同期的な初期化処理
     private func performInitialSetup() {
+        print("performInitialSetup: 初期化開始")
+        
         // Core Dataの準備が完了してから初期化
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
@@ -80,18 +82,24 @@ class AttendanceViewModel: ObservableObject {
             self.loadCurrentSemester()
             
             // 3. 時間割を読み込み（currentSemesterに依存）
-            if self.currentSemester != nil {
-                self.loadTimetable()
+            // 少し遅延させてCore Dataのコンテキストが完全に準備されるのを待つ
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
+                guard let self = self else { return }
+                if self.currentSemester != nil {
+                    print("performInitialSetup: 時間割読み込みを実行")
+                    self.loadTimetable()
+                }
+                
+                // 4. 初期化完了
+                self.isInitialized = true
+                self.initializationError = nil
+                self.objectWillChange.send()
+                
+                print("AttendanceViewModel initialization completed successfully")
+                print("Available semesters: \(self.availableSemesters.count)")
+                print("Current semester: \(self.currentSemester?.name ?? "none")")
+                print("Timetable loaded: \(self.timetable.flatMap { $0 }.compactMap { $0 }.count) courses")
             }
-            
-            // 4. 初期化完了
-            self.isInitialized = true
-            self.initializationError = nil
-            self.objectWillChange.send()
-            
-            print("AttendanceViewModel initialization completed successfully")
-            print("Available semesters: \(self.availableSemesters.count)")
-            print("Current semester: \(self.currentSemester?.name ?? "none")")
         }
     }
     
@@ -272,7 +280,14 @@ class AttendanceViewModel: ObservableObject {
     
     /// 時間割を読み込み（パフォーマンス最適化版）
     func loadTimetable() {
-        guard let semester = currentSemester else { return }
+        guard let semester = currentSemester else { 
+            print("loadTimetable: currentSemesterがnilのため処理をスキップ")
+            return 
+        }
+        
+        // セメスターIDを事前に取得（メインコンテキストで）
+        let semesterObjectID = semester.objectID
+        print("loadTimetable: 学期 '\(semester.name ?? "Unknown")' の時間割を読み込み中")
         
         // 時間割を初期化
         DispatchQueue.main.async {
@@ -281,8 +296,14 @@ class AttendanceViewModel: ObservableObject {
         
         // バックグラウンドで実行
         backgroundContext.perform {
+            // バックグラウンドコンテキストでセメスターを再取得
+            guard let bgSemester = try? self.backgroundContext.existingObject(with: semesterObjectID) as? Semester else {
+                print("loadTimetable: バックグラウンドコンテキストでセメスターを取得できませんでした")
+                return
+            }
+            
             let request: NSFetchRequest<Course> = Course.fetchRequest()
-            request.predicate = NSPredicate(format: "semester == %@", semester)
+            request.predicate = NSPredicate(format: "semester == %@", bgSemester)
             request.sortDescriptors = [
                 NSSortDescriptor(keyPath: \Course.period, ascending: true),
                 NSSortDescriptor(keyPath: \Course.dayOfWeek, ascending: true)
@@ -291,9 +312,12 @@ class AttendanceViewModel: ObservableObject {
             
             do {
                 let courses = try self.backgroundContext.fetch(request)
-                var newTimetable = Array(repeating: Array(repeating: nil as Course?, count: 5), count: 5)
+                print("loadTimetable: \(courses.count)個のコースを取得")
                 
-                // 効率的な配置
+                // メインコンテキストのObjectIDに変換してから時間割に配置
+                var courseObjectIDs: [[NSManagedObjectID?]] = Array(repeating: Array(repeating: nil, count: 5), count: 5)
+                
+                // 効率的な配置（ObjectIDのみ保存）
                 for course in courses {
                     let dayIndex = Int(course.dayOfWeek) - 1
                     let periodIndex = Int(course.period) - 1
@@ -302,12 +326,24 @@ class AttendanceViewModel: ObservableObject {
                         continue
                     }
                     
-                    newTimetable[periodIndex][dayIndex] = course
+                    courseObjectIDs[periodIndex][dayIndex] = course.objectID
                 }
                 
-                // メインスレッドでUI更新
+                // メインスレッドでUI更新（メインコンテキストでオブジェクトを再取得）
                 DispatchQueue.main.async {
+                    var newTimetable: [[Course?]] = Array(repeating: Array(repeating: nil, count: 5), count: 5)
+                    
+                    for periodIndex in 0..<5 {
+                        for dayIndex in 0..<5 {
+                            if let objectID = courseObjectIDs[periodIndex][dayIndex],
+                               let course = try? self.context.existingObject(with: objectID) as? Course {
+                                newTimetable[periodIndex][dayIndex] = course
+                            }
+                        }
+                    }
+                    
                     self.timetable = newTimetable
+                    print("loadTimetable: 時間割の更新完了")
                     
                     // 時間割読み込み後に欠席数キャッシュも更新
                     self.loadAllAbsenceCounts()
@@ -316,6 +352,7 @@ class AttendanceViewModel: ObservableObject {
                     self.updateClassReminders()
                 }
             } catch {
+                print("loadTimetable: エラー = \(error)")
                 self.handleError(error, context: "時間割の読み込み", critical: true)
             }
         }

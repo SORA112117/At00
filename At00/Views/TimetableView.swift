@@ -74,8 +74,19 @@ struct TimetableView: View {
                     selectedTimeSlot = nil
                 }
             }
-            .onAppear { loadTimeSlots() }
-            .onChange(of: viewModel.currentSemester?.semesterId) { _, _ in loadTimeSlots() }
+            .onAppear { 
+                loadTimeSlots()
+                // 初回表示時に時間割を再読み込み
+                if viewModel.currentSemester != nil && viewModel.timetable.flatMap({ $0 }).compactMap({ $0 }).isEmpty {
+                    print("TimetableView.onAppear: 時間割が空のため再読み込み")
+                    viewModel.loadTimetable()
+                }
+            }
+            .onChange(of: viewModel.currentSemester?.semesterId) { _, _ in 
+                loadTimeSlots()
+                // 学期変更時にも時間割を再読み込み
+                viewModel.loadTimetable()
+            }
             .task { loadTimeSlots() }
             .onReceive(NotificationCenter.default.publisher(for: .attendanceDataDidChange)) { _ in
                 DispatchQueue.main.async { viewModel.objectWillChange.send() }
