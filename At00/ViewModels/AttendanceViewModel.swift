@@ -615,7 +615,7 @@ class AttendanceViewModel: ObservableObject {
     }
     
     // 新しい授業を追加
-    func addCourse(name: String, dayOfWeek: Int, period: Int, totalClasses: Int = 15, colorIndex: Int = 0) -> AddCourseResult {
+    func addCourse(name: String, dayOfWeek: Int, period: Int, totalClasses: Int = 15, maxAbsences: Int? = nil, colorIndex: Int = 0) -> AddCourseResult {
         guard let semester = currentSemester else { return .currentSlotOccupied }
         
         // 現在の学期の指定位置に既に授業があるかチェック
@@ -631,7 +631,7 @@ class AttendanceViewModel: ObservableObject {
         course.dayOfWeek = Int16(dayOfWeek)
         course.period = Int16(period)
         course.totalClasses = Int16(totalClasses)
-        course.maxAbsences = Int16(totalClasses / 3) // デフォルト: 1/3まで欠席可能
+        course.maxAbsences = Int16(maxAbsences ?? (totalClasses / 3)) // 指定された値を使用、なければデフォルト
         course.semester = semester
         course.isNotificationEnabled = true
         course.colorIndex = Int16(colorIndex)

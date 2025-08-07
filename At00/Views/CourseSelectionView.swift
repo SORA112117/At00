@@ -210,6 +210,7 @@ struct CourseSelectionView: View {
             dayOfWeek: dayOfWeek,
             period: period,
             totalClasses: newTotalClasses,
+            maxAbsences: newMaxAbsences,
             colorIndex: newSelectedColorIndex
         )
         
