@@ -1,0 +1,96 @@
+/* 
+  Localizable.strings
+  At00
+  
+  English localization
+*/
+
+// Main tabs
+"timetable" = "Timetable";
+"statistics" = "Statistics";
+"settings" = "Settings";
+
+// Common buttons
+"save" = "Save";
+"cancel" = "Cancel";
+"delete" = "Delete";
+"close" = "Close";
+"ok" = "OK";
+"next" = "Next";
+"skip" = "Skip";
+"start" = "Get Started";
+
+// Timetable
+"absence_management" = "Attendance Management";
+"sheet_selection" = "Sheet Selection";
+"sheet_management" = "Sheet Management";
+"add_course" = "Add Course";
+"edit_course" = "Edit Course";
+
+// Course details
+"course_name" = "Course Name";
+"total_classes" = "Total Classes";
+"max_absences" = "Max Absences";
+"color" = "Color";
+"absence_records" = "Absence Records";
+
+// Days and periods
+"monday" = "Mon";
+"tuesday" = "Tue";
+"wednesday" = "Wed";
+"thursday" = "Thu";
+"friday" = "Fri";
+"saturday" = "Sat";
+"sunday" = "Sun";
+
+"period_1" = "1st";
+"period_2" = "2nd";
+"period_3" = "3rd";
+"period_4" = "4th";
+"period_5" = "5th";
+
+// Attendance types
+"absent" = "Absent";
+"late" = "Late";
+"early_leave" = "Early Leave";
+"official_absence" = "Official Absence";
+"present" = "Present";
+
+// Settings
+"attendance_settings" = "Attendance Settings";
+"notification_settings" = "Notification Settings";
+"appearance" = "Appearance";
+"appearance_settings" = "Appearance Settings";
+"data_management" = "Data Management";
+"timetable_sheet_management" = "Timetable Sheet Management";
+"semester_reset" = "Semester Reset";
+"reset_to_initial" = "Reset App to Initial State";
+"support" = "Support";
+"help_and_usage" = "Help & Usage";
+"app_info" = "App Information";
+"version" = "Version";
+"privacy_policy" = "Privacy Policy";
+
+// Alerts and messages
+"already_recorded" = "Already Recorded";
+"daily_limit_reached" = "Daily Record Limit Reached";
+"outside_semester_period" = "Outside Semester Period";
+"error" = "Error";
+"duplicate_course_error" = "Duplicate Course Error";
+"outside_period_error" = "Outside Period Error";
+
+// Empty states
+"no_courses" = "No Courses";
+"create_timetable" = "Let's Create a Timetable";
+"no_statistics" = "No Statistics Data";
+"no_records" = "No Absence Records";
+
+// Onboarding
+"welcome_to_at00" = "Welcome to At00";
+"university_attendance_app" = "University Attendance Management App";
+"create_timetable_title" = "Create Timetable";
+"simple_setup" = "Simple Setup";
+"one_tap_record" = "One-Tap Recording";
+"simple_operation" = "Simple Operation";
+"check_with_statistics" = "Check with Statistics";
+"safe_management" = "Safe Management";

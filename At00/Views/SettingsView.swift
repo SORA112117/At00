@@ -16,6 +16,7 @@ struct SettingsView: View {
     @Binding var shouldNavigateToSheetManagement: Bool
     @State private var navigationPath = NavigationPath()
     @State private var showingHelp = false
+    @State private var showingPrivacyPolicy = false
     
     var body: some View {
         NavigationStack(path: $navigationPath) {
@@ -75,6 +76,18 @@ struct SettingsView: View {
                             .foregroundColor(.secondary)
                     }
                     
+                    Button(action: {
+                        showingPrivacyPolicy = true
+                    }) {
+                        HStack {
+                            Text("プライバシーポリシー")
+                                .foregroundColor(.primary)
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                    }
                 }
             }
             .navigationTitle("設定")
@@ -118,6 +131,9 @@ struct SettingsView: View {
         }
         .sheet(isPresented: $showingHelp) {
             HelpView()
+        }
+        .sheet(isPresented: $showingPrivacyPolicy) {
+            PrivacyPolicyView()
         }
     }
 }

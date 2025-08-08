@@ -695,7 +695,7 @@ class AttendanceViewModel: ObservableObject {
                 format: "semester == %@ AND courseName == %@ AND courseId != %@",
                 semester,
                 courseName,
-                course.courseId! as CVarArg
+(course.courseId ?? UUID()) as CVarArg
             )
             currentSemesterRequest.fetchLimit = 1
             

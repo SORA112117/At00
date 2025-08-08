@@ -557,7 +557,7 @@ struct EditCourseDetailView: View {
             request.predicate = NSPredicate(
                 format: "courseName == %@ AND courseId != %@",
                 courseName,
-                course.courseId! as CVarArg
+(course.courseId ?? UUID()) as CVarArg
             )
             request.fetchLimit = 1
             
@@ -571,7 +571,7 @@ struct EditCourseDetailView: View {
                             format: "semester == %@ AND courseName == %@ AND courseId != %@",
                             semester,
                             courseName,
-                            course.courseId! as CVarArg
+            (course.courseId ?? UUID()) as CVarArg
                         )
                         currentSemesterRequest.fetchLimit = 1
                         

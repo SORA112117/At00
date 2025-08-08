@@ -1,0 +1,96 @@
+/* 
+  Localizable.strings
+  At00
+  
+  Japanese localization
+*/
+
+// Main tabs
+"timetable" = "時間割";
+"statistics" = "統計";
+"settings" = "設定";
+
+// Common buttons
+"save" = "保存";
+"cancel" = "キャンセル";
+"delete" = "削除";
+"close" = "閉じる";
+"ok" = "OK";
+"next" = "次へ";
+"skip" = "スキップ";
+"start" = "はじめる";
+
+// Timetable
+"absence_management" = "欠席管理";
+"sheet_selection" = "シート選択";
+"sheet_management" = "シート管理";
+"add_course" = "授業選択";
+"edit_course" = "授業編集";
+
+// Course details
+"course_name" = "授業名";
+"total_classes" = "総授業回数";
+"max_absences" = "最大欠席可能";
+"color" = "カラー";
+"absence_records" = "欠席記録";
+
+// Days and periods
+"monday" = "月";
+"tuesday" = "火";
+"wednesday" = "水";
+"thursday" = "木";
+"friday" = "金";
+"saturday" = "土";
+"sunday" = "日";
+
+"period_1" = "1限";
+"period_2" = "2限";
+"period_3" = "3限";
+"period_4" = "4限";
+"period_5" = "5限";
+
+// Attendance types
+"absent" = "欠席";
+"late" = "遅刻";
+"early_leave" = "早退";
+"official_absence" = "公欠";
+"present" = "出席";
+
+// Settings
+"attendance_settings" = "出席設定";
+"notification_settings" = "通知設定";
+"appearance" = "外観";
+"appearance_settings" = "外観設定";
+"data_management" = "データ管理";
+"timetable_sheet_management" = "時間割シート管理";
+"semester_reset" = "学期別時間割リセット";
+"reset_to_initial" = "アプリを初期状態にリセット";
+"support" = "サポート";
+"help_and_usage" = "使い方・ヘルプ";
+"app_info" = "アプリ情報";
+"version" = "バージョン";
+"privacy_policy" = "プライバシーポリシー";
+
+// Alerts and messages
+"already_recorded" = "既に記録済み";
+"daily_limit_reached" = "1日の記録上限に達しました";
+"outside_semester_period" = "学期期間外のため記録できません";
+"error" = "エラー";
+"duplicate_course_error" = "授業名の重複エラー";
+"outside_period_error" = "学期期間外エラー";
+
+// Empty states
+"no_courses" = "授業がありません";
+"create_timetable" = "時間割を作成しましょう";
+"no_statistics" = "統計データがありません";
+"no_records" = "欠席記録はありません";
+
+// Onboarding
+"welcome_to_at00" = "At00へようこそ";
+"university_attendance_app" = "大学生向け授業欠席管理アプリ";
+"create_timetable_title" = "時間割を作成";
+"simple_setup" = "簡単セットアップ";
+"one_tap_record" = "ワンタップで記録";
+"simple_operation" = "シンプルな操作";
+"check_with_statistics" = "統計で確認";
+"safe_management" = "安心の管理";

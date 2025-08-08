@@ -17,7 +17,7 @@ struct MainTabView: View {
             TimetableView()
                 .tabItem {
                     Image(systemName: "calendar")
-                    Text("時間割")
+                    Text(NSLocalizedString("timetable", comment: "Timetable tab title"))
                 }
                 .tag(0)
                 .accessibilityLabel("時間割タブ")
@@ -26,7 +26,7 @@ struct MainTabView: View {
             EnhancedStatisticsView()
                 .tabItem {
                     Image(systemName: "chart.bar.fill")
-                    Text("統計")
+                    Text(NSLocalizedString("statistics", comment: "Statistics tab title"))
                 }
                 .tag(1)
                 .accessibilityLabel("統計タブ")
@@ -35,7 +35,7 @@ struct MainTabView: View {
             SettingsView(shouldNavigateToSheetManagement: $viewModel.shouldNavigateToSheetManagement)
                 .tabItem {
                     Image(systemName: "gearshape.fill")
-                    Text("設定")
+                    Text(NSLocalizedString("settings", comment: "Settings tab title"))
                 }
                 .tag(2)
                 .accessibilityLabel("設定タブ")
