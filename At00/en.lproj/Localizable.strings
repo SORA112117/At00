@@ -1,96 +1,96 @@
 /* 
   Localizable.strings
-  At00
+  とびとび
   
-  English localization
+  Japanese localization
 */
 
 // Main tabs
-"timetable" = "Timetable";
-"statistics" = "Statistics";
-"settings" = "Settings";
+"timetable" = "時間割";
+"statistics" = "統計";
+"settings" = "設定";
 
 // Common buttons
-"save" = "Save";
-"cancel" = "Cancel";
-"delete" = "Delete";
-"close" = "Close";
+"save" = "保存";
+"cancel" = "キャンセル";
+"delete" = "削除";
+"close" = "閉じる";
 "ok" = "OK";
-"next" = "Next";
-"skip" = "Skip";
-"start" = "Get Started";
+"next" = "次へ";
+"skip" = "スキップ";
+"start" = "はじめる";
 
 // Timetable
-"absence_management" = "Attendance Management";
-"sheet_selection" = "Sheet Selection";
-"sheet_management" = "Sheet Management";
-"add_course" = "Add Course";
-"edit_course" = "Edit Course";
+"absence_management" = "欠席管理";
+"sheet_selection" = "シート選択";
+"sheet_management" = "シート管理";
+"add_course" = "授業選択";
+"edit_course" = "授業編集";
 
 // Course details
-"course_name" = "Course Name";
-"total_classes" = "Total Classes";
-"max_absences" = "Max Absences";
-"color" = "Color";
-"absence_records" = "Absence Records";
+"course_name" = "授業名";
+"total_classes" = "総授業回数";
+"max_absences" = "最大欠席可能";
+"color" = "カラー";
+"absence_records" = "欠席記録";
 
 // Days and periods
-"monday" = "Mon";
-"tuesday" = "Tue";
-"wednesday" = "Wed";
-"thursday" = "Thu";
-"friday" = "Fri";
-"saturday" = "Sat";
-"sunday" = "Sun";
+"monday" = "月";
+"tuesday" = "火";
+"wednesday" = "水";
+"thursday" = "木";
+"friday" = "金";
+"saturday" = "土";
+"sunday" = "日";
 
-"period_1" = "1st";
-"period_2" = "2nd";
-"period_3" = "3rd";
-"period_4" = "4th";
-"period_5" = "5th";
+"period_1" = "1限";
+"period_2" = "2限";
+"period_3" = "3限";
+"period_4" = "4限";
+"period_5" = "5限";
 
 // Attendance types
-"absent" = "Absent";
-"late" = "Late";
-"early_leave" = "Early Leave";
-"official_absence" = "Official Absence";
-"present" = "Present";
+"absent" = "欠席";
+"late" = "遅刻";
+"early_leave" = "早退";
+"official_absence" = "公欠";
+"present" = "出席";
 
 // Settings
-"attendance_settings" = "Attendance Settings";
-"notification_settings" = "Notification Settings";
-"appearance" = "Appearance";
-"appearance_settings" = "Appearance Settings";
-"data_management" = "Data Management";
-"timetable_sheet_management" = "Timetable Sheet Management";
-"semester_reset" = "Semester Reset";
-"reset_to_initial" = "Reset App to Initial State";
-"support" = "Support";
-"help_and_usage" = "Help & Usage";
-"app_info" = "App Information";
-"version" = "Version";
-"privacy_policy" = "Privacy Policy";
+"attendance_settings" = "出席設定";
+"notification_settings" = "通知設定";
+"appearance" = "外観";
+"appearance_settings" = "外観設定";
+"data_management" = "データ管理";
+"timetable_sheet_management" = "時間割シート管理";
+"semester_reset" = "学期別時間割リセット";
+"reset_to_initial" = "アプリを初期状態にリセット";
+"support" = "サポート";
+"help_and_usage" = "使い方・ヘルプ";
+"app_info" = "アプリ情報";
+"version" = "バージョン";
+"privacy_policy" = "プライバシーポリシー";
 
 // Alerts and messages
-"already_recorded" = "Already Recorded";
-"daily_limit_reached" = "Daily Record Limit Reached";
-"outside_semester_period" = "Outside Semester Period";
-"error" = "Error";
-"duplicate_course_error" = "Duplicate Course Error";
-"outside_period_error" = "Outside Period Error";
+"already_recorded" = "既に記録済み";
+"daily_limit_reached" = "1日の記録上限に達しました";
+"outside_semester_period" = "学期期間外のため記録できません";
+"error" = "エラー";
+"duplicate_course_error" = "授業名の重複エラー";
+"outside_period_error" = "学期期間外エラー";
 
 // Empty states
-"no_courses" = "No Courses";
-"create_timetable" = "Let's Create a Timetable";
-"no_statistics" = "No Statistics Data";
-"no_records" = "No Absence Records";
+"no_courses" = "授業がありません";
+"create_timetable" = "時間割を作成しましょう";
+"no_statistics" = "統計データがありません";
+"no_records" = "欠席記録はありません";
 
 // Onboarding
-"welcome_to_at00" = "Welcome to At00";
-"university_attendance_app" = "University Attendance Management App";
-"create_timetable_title" = "Create Timetable";
-"simple_setup" = "Simple Setup";
-"one_tap_record" = "One-Tap Recording";
-"simple_operation" = "Simple Operation";
-"check_with_statistics" = "Check with Statistics";
-"safe_management" = "Safe Management";
+"welcome_to_at00" = "とびとびへようこそ";
+"university_attendance_app" = "大学生向け授業欠席管理アプリ";
+"create_timetable_title" = "時間割を作成";
+"simple_setup" = "簡単セットアップ";
+"one_tap_record" = "ワンタップで記録";
+"simple_operation" = "シンプルな操作";
+"check_with_statistics" = "統計で確認";
+"safe_management" = "安心の管理";
