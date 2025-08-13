@@ -110,6 +110,7 @@ struct TimetableView: View {
                 }
             }
         }
+        .navigationViewStyle(StackNavigationViewStyle())
     }
     
     @ViewBuilder
@@ -186,32 +187,36 @@ struct TimetableView: View {
     private func timetableGridView(geometry: GeometryProxy) -> some View {
         let spacing: CGFloat = 1
         let leftColumnWidth: CGFloat = 50
-        let padding: CGFloat = 32 // 左右16pxずつ
-        let availableWidth = geometry.size.width - leftColumnWidth - padding - (spacing * 4) // spacing between 5 columns
-        let cellWidth = availableWidth / 5
-        let cellHeight: CGFloat = max(80, min(100, geometry.size.height / 8))
+        let padding: CGFloat = UIDevice.current.userInterfaceIdiom == .pad ? 100 : 32 // iPadではより多くのパディング
+        let maxTotalWidth: CGFloat = UIDevice.current.userInterfaceIdiom == .pad ? 700 : .infinity // iPadで最大幅を制限
+        let effectiveWidth = min(geometry.size.width, maxTotalWidth)
+        let availableWidth = effectiveWidth - leftColumnWidth - padding - (spacing * 4)
+        let cellWidth = min(availableWidth / 5, UIDevice.current.userInterfaceIdiom == .pad ? 100 : 80) // iPadで最大セル幅を制限
+        let cellHeight: CGFloat = UIDevice.current.userInterfaceIdiom == .pad ? 90 : max(80, min(100, geometry.size.height / 8))
         
         return ScrollView {
             VStack(spacing: 2) {
                 timetableHeaderView(cellWidth: cellWidth)
                 timetableBodyView(cellWidth: cellWidth, cellHeight: cellHeight)
             }
-            .padding(.horizontal, 16)
+            .padding(.horizontal, UIDevice.current.userInterfaceIdiom == .pad ? 50 : 16)
+            .frame(maxWidth: UIDevice.current.userInterfaceIdiom == .pad ? 700 : .infinity)
+            .frame(maxWidth: .infinity, alignment: .center) // iPadで中央配置
         }
     }
     
     private func timetableHeaderView(cellWidth: CGFloat) -> some View {
         HStack(spacing: 1) {
             Text("時限")
-                .font(.system(size: 10))
-                .frame(width: 50, height: 40)
+                .font(.system(size: UIDevice.current.userInterfaceIdiom == .pad ? 12 : 10))
+                .frame(width: 50, height: UIDevice.current.userInterfaceIdiom == .pad ? 45 : 40)
                 .background(Color(.secondarySystemBackground))
                 .animation(.easeInOut(duration: 0.3), value: Color(.secondarySystemBackground))
             
             ForEach(0..<5, id: \.self) { dayIndex in
                 Text(dayNames[dayIndex])
-                    .font(.system(size: 11, weight: .medium))
-                    .frame(width: cellWidth, height: 40)
+                    .font(.system(size: UIDevice.current.userInterfaceIdiom == .pad ? 13 : 11, weight: .medium))
+                    .frame(width: cellWidth, height: UIDevice.current.userInterfaceIdiom == .pad ? 45 : 40)
                     .background(Color(.secondarySystemBackground))
                     .animation(.easeInOut(duration: 0.3), value: Color(.secondarySystemBackground))
             }
@@ -235,9 +240,9 @@ struct TimetableView: View {
         } label: {
             VStack(spacing: 2) {
                 Text(periods[periodIndex])
-                    .font(.system(size: 12, weight: .medium))
+                    .font(.system(size: UIDevice.current.userInterfaceIdiom == .pad ? 14 : 12, weight: .medium))
                 Text(timeSlots[periodIndex])
-                    .font(.system(size: 8))
+                    .font(.system(size: UIDevice.current.userInterfaceIdiom == .pad ? 10 : 8))
                     .foregroundColor(.secondary)
             }
             .frame(width: 50, height: height)
@@ -459,17 +464,17 @@ struct EnhancedCourseCell: View {
                 if let course = course {
                     // 上部：科目名（6文字まで2行表示）
                     Text(limitCourseName(course.courseName ?? ""))
-                        .font(.system(size: 9, weight: .medium))
+                        .font(.system(size: UIDevice.current.userInterfaceIdiom == .pad ? 11 : 9, weight: .medium))
                         .multilineTextAlignment(.center)
                         .lineLimit(2)
                         .foregroundColor(.primary)
                         .frame(maxWidth: .infinity)
-                        .frame(height: 24)
-                        .padding(.horizontal, 2)
+                        .frame(height: UIDevice.current.userInterfaceIdiom == .pad ? 28 : 24)
+                        .padding(.horizontal, UIDevice.current.userInterfaceIdiom == .pad ? 4 : 2)
                     
                     // 中央：欠席数（大きなフォント）
                     Text("\(absenceCount)")
-                        .font(.system(size: 22, weight: .bold))
+                        .font(.system(size: UIDevice.current.userInterfaceIdiom == .pad ? 26 : 22, weight: .bold))
                         .foregroundColor(.primary)
                         .scaleEffect(showingCountAnimation ? 1.1 : 1.0)
                         .animation(.spring(response: 0.25, dampingFraction: 0.8), value: showingCountAnimation)
@@ -492,19 +497,19 @@ struct EnhancedCourseCell: View {
                             // 初期値を設定
                             previousCount = absenceCount
                         }
-                        .frame(height: 32)
+                        .frame(height: UIDevice.current.userInterfaceIdiom == .pad ? 36 : 32)
                     
                     // 下部：カラーボックス（数字の下に配置）
-                    Spacer(minLength: 4) // カラーボックスの位置を少し下に
+                    Spacer(minLength: UIDevice.current.userInterfaceIdiom == .pad ? 6 : 4) // カラーボックスの位置を少し下に
                     
                     createColorBoxGrid(course: course, absenceCount: absenceCount, cellWidth: cellWidth)
-                        .frame(height: 8) // 正方形用に高さ調整
-                        .padding(.horizontal, 2)
+                        .frame(height: UIDevice.current.userInterfaceIdiom == .pad ? 10 : 8) // 正方形用に高さ調整
+                        .padding(.horizontal, UIDevice.current.userInterfaceIdiom == .pad ? 4 : 2)
                     
-                    Spacer(minLength: 2)
+                    Spacer(minLength: UIDevice.current.userInterfaceIdiom == .pad ? 3 : 2)
                 } else {
                     Text("+")
-                        .font(.system(size: 20, weight: .ultraLight))
+                        .font(.system(size: UIDevice.current.userInterfaceIdiom == .pad ? 24 : 20, weight: .ultraLight))
                         .foregroundColor(Color(.systemGray2))
                 }
             }

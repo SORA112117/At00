@@ -125,12 +125,15 @@ struct EnhancedStatisticsView: View {
                         emptyStateView
                     }
                 }
-                .padding()
+                .padding(UIDevice.current.userInterfaceIdiom == .pad ? 24 : 16)
+                .frame(maxWidth: UIDevice.current.userInterfaceIdiom == .pad ? 800 : .infinity)
+                .frame(maxWidth: .infinity, alignment: .center)
                 .id(refreshTrigger) // リアルタイム更新用
             }
             .navigationTitle("出席統計")
             .navigationBarTitleDisplayMode(.large)
         }
+        .navigationViewStyle(StackNavigationViewStyle())
         .onReceive(NotificationCenter.default.publisher(for: .statisticsDataDidChange)) { _ in
             // 統計データが変更されたときに再描画
             DispatchQueue.main.async {
@@ -258,12 +261,12 @@ struct EnhancedStatisticsView: View {
                 .font(.headline)
             
             ScrollView(.horizontal, showsIndicators: false) {
-                HStack(alignment: .bottom, spacing: 16) {
+                HStack(alignment: .bottom, spacing: UIDevice.current.userInterfaceIdiom == .pad ? 24 : 16) {
                     ForEach(allCourses, id: \.courseId) { course in
                         barChart(for: course)
                     }
                 }
-                .padding(.vertical)
+                .padding(.vertical, UIDevice.current.userInterfaceIdiom == .pad ? 20 : 16)
             }
         }
         .padding()
@@ -274,28 +277,29 @@ struct EnhancedStatisticsView: View {
     // 個別の棒グラフ
     private func barChart(for course: Course) -> some View {
         let absencesInPeriod = getAbsencesInPeriod(for: course).count
+        let maxHeight: Double = UIDevice.current.userInterfaceIdiom == .pad ? 200 : 150
         let barHeight = maxAbsenceCount > 0 ? 
-            (Double(absencesInPeriod) / Double(maxAbsenceCount)) * 150 : 0
+            (Double(absencesInPeriod) / Double(maxAbsenceCount)) * maxHeight : 0
         
-        return VStack(spacing: 8) {
+        return VStack(spacing: UIDevice.current.userInterfaceIdiom == .pad ? 10 : 8) {
             // 数値表示
             Text("\(absencesInPeriod)")
-                .font(.caption)
+                .font(UIDevice.current.userInterfaceIdiom == .pad ? .body : .caption)
                 .fontWeight(.bold)
                 .foregroundColor(DesignSystem.getColor(for: Int(course.colorIndex)))
             
             // 棒グラフ
             RoundedRectangle(cornerRadius: 4)
                 .fill(DesignSystem.getColor(for: Int(course.colorIndex)))
-                .frame(width: 30, height: max(CGFloat(barHeight), 4))
+                .frame(width: UIDevice.current.userInterfaceIdiom == .pad ? 40 : 30, height: max(CGFloat(barHeight), 4))
                 .animation(.easeInOut(duration: 0.3), value: barHeight)
             
             // 科目名
             Text(course.courseName ?? "")
-                .font(.caption2)
+                .font(UIDevice.current.userInterfaceIdiom == .pad ? .caption : .caption2)
                 .lineLimit(2)
                 .multilineTextAlignment(.center)
-                .frame(width: 60)
+                .frame(width: UIDevice.current.userInterfaceIdiom == .pad ? 80 : 60)
         }
     }
     
