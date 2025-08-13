@@ -52,7 +52,8 @@ struct HelpView: View {
             title: "通知機能",
             items: [
                 HelpItem(title: "欠席上限通知", description: "欠席回数が上限に近づいた時にお知らせ"),
-                HelpItem(title: "記録忘れ通知", description: "設定した時刻に記録の入力を促す通知"),
+                HelpItem(title: "授業開始前通知", description: "授業開始前に出席状況をリマインド"),
+                HelpItem(title: "定期リマインダー", description: "設定した時刻に記録の入力を促す通知"),
                 HelpItem(title: "通知設定", description: "設定 > 通知設定から詳細にカスタマイズ可能")
             ]
         )
@@ -69,12 +70,12 @@ struct HelpView: View {
                                 .font(.title)
                                 .foregroundColor(.blue)
                             
-                            Text("At00の使い方")
+                            Text("とびとびの使い方")
                                 .font(.title)
                                 .fontWeight(.bold)
                         }
                         
-                        Text("大学生向け授業欠席管理アプリの基本的な使い方をご案内します。")
+                        Text("とびとびの基本的な使い方をご案内します。")
                             .font(.subheadline)
                             .foregroundColor(.secondary)
                             .padding(.leading, 40)
