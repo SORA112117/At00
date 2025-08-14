@@ -696,86 +696,106 @@ struct AddAbsenceRecordSheet: View {
     }
     
     var body: some View {
-        NavigationView {
-            VStack(spacing: 24) {
-                VStack(spacing: 16) {
-                    Text("欠席記録を追加")
-                        .font(.title2)
-                        .fontWeight(.semibold)
-                    
-                    Text("欠席した日付を選択してください")
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
-                }
-                
-                // 学期期間情報
-                VStack(spacing: 8) {
-                    if let semesterName = currentSemester?.name {
-                        Text("現在の学期: \(semesterName)")
-                            .font(.caption)
-                            .fontWeight(.medium)
-                            .foregroundColor(.blue)
-                    }
-                    
-                    Text(dateRangeText)
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                    
-                    if !isDateValid {
-                        HStack(spacing: 4) {
-                            Image(systemName: "exclamationmark.triangle.fill")
-                            Text("選択された日付は学期期間外です")
-                        }
-                        .font(.caption)
-                        .foregroundColor(.red)
-                        .padding(.top, 4)
-                    }
-                }
-                .padding()
-                .background(Color(.tertiarySystemBackground))
-                .cornerRadius(8)
-                
-                DatePicker(
-                    "欠席日",
-                    selection: $selectedDate,
-                    displayedComponents: .date
-                )
-                .datePickerStyle(GraphicalDatePickerStyle())
-                .padding()
-                .background(isDateValid ? Color(.secondarySystemBackground) : Color(.systemRed).opacity(0.1))
-                .cornerRadius(12)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12)
-                        .stroke(isDateValid ? Color.clear : Color.red, lineWidth: 1)
-                )
+        VStack(spacing: 0) {
+            // ヘッダー
+            HStack {
+                Text("欠席記録を追加")
+                    .font(.title3)
+                    .fontWeight(.semibold)
                 
                 Spacer()
                 
-                HStack(spacing: 16) {
-                    Button("キャンセル") {
-                        onCancel()
-                    }
-                    .font(.system(size: 16, weight: .medium))
-                    .foregroundColor(.secondary)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 12)
-                    .background(Color(.tertiarySystemBackground))
-                    .cornerRadius(10)
-                    
-                    Button("追加") {
-                        onAdd()
-                    }
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundColor(.white)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 12)
-                    .background(isDateValid ? Color.blue : Color.gray)
-                    .cornerRadius(10)
-                    .disabled(!isDateValid)
+                Button(action: onCancel) {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.title2)
+                        .foregroundColor(.secondary)
                 }
             }
             .padding()
-            .navigationBarHidden(true)
+            .background(Color(.systemBackground))
+            
+            ScrollView {
+                VStack(spacing: 20) {
+                    // 説明テキスト
+                    Text("欠席した日付を選択してください")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                        .padding(.top, 8)
+                    
+                    // 学期期間情報
+                    VStack(spacing: 8) {
+                        if let semesterName = currentSemester?.name {
+                            Text("現在の学期: \(semesterName)")
+                                .font(.caption)
+                                .fontWeight(.medium)
+                                .foregroundColor(.blue)
+                        }
+                        
+                        Text(dateRangeText)
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        
+                        if !isDateValid {
+                            HStack(spacing: 4) {
+                                Image(systemName: "exclamationmark.triangle.fill")
+                                Text("選択された日付は学期期間外です")
+                            }
+                            .font(.caption)
+                            .foregroundColor(.red)
+                            .padding(.top, 4)
+                        }
+                    }
+                    .padding()
+                    .frame(maxWidth: UIDevice.current.userInterfaceIdiom == .pad ? 500 : .infinity)
+                    .background(Color(.tertiarySystemBackground))
+                    .cornerRadius(8)
+                    
+                    // 日付選択
+                    DatePicker(
+                        "欠席日",
+                        selection: $selectedDate,
+                        displayedComponents: .date
+                    )
+                    .datePickerStyle(GraphicalDatePickerStyle())
+                    .padding()
+                    .frame(maxWidth: UIDevice.current.userInterfaceIdiom == .pad ? 500 : .infinity)
+                    .background(isDateValid ? Color(.secondarySystemBackground) : Color(.systemRed).opacity(0.1))
+                    .cornerRadius(12)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12)
+                            .stroke(isDateValid ? Color.clear : Color.red, lineWidth: 1)
+                    )
+                    
+                    // ボタン
+                    HStack(spacing: 16) {
+                        Button("キャンセル") {
+                            onCancel()
+                        }
+                        .font(.system(size: 16, weight: .medium))
+                        .foregroundColor(.secondary)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                        .background(Color(.tertiarySystemBackground))
+                        .cornerRadius(10)
+                        
+                        Button("追加") {
+                            onAdd()
+                        }
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                        .background(isDateValid ? Color.blue : Color.gray)
+                        .cornerRadius(10)
+                        .disabled(!isDateValid)
+                    }
+                    .frame(maxWidth: UIDevice.current.userInterfaceIdiom == .pad ? 400 : .infinity)
+                    .padding(.top, 8)
+                }
+                .padding()
+            }
         }
+        .frame(maxWidth: UIDevice.current.userInterfaceIdiom == .pad ? 600 : .infinity)
+        .frame(maxHeight: UIDevice.current.userInterfaceIdiom == .pad ? 700 : .infinity)
     }
 }
