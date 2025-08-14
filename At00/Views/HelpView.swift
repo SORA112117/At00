@@ -25,8 +25,7 @@ struct HelpView: View {
             title: "欠席記録",
             items: [
                 HelpItem(title: "ワンタップ記録", description: "授業セルをタップすることで欠席記録が追加されます"),
-                HelpItem(title: "詳細記録", description: "授業セルを長押しして詳細画面から遅刻・早退・公欠も記録可能"),
-                HelpItem(title: "記録の修正", description: "授業詳細画面から過去の記録を編集・削除できます")
+                HelpItem(title: "記録の管理", description: "授業セルを長押しして編集画面から過去の記録を削除できます")
             ]
         ),
         HelpSection(
